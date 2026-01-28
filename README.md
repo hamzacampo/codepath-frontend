@@ -1,36 +1,110 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CodePath Frontend
+
+AI-Powered Competitive Programming Platform - Frontend Application
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **State Management**: Zustand
+- **Forms**: React Hook Form + Zod
+- **Charts**: Recharts
+- **Code Editor**: Monaco Editor
+- **HTTP Client**: Axios
+- **Icons**: Lucide React
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js 18+ 
+- npm or yarn
+
+### Installation
+
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Create environment file:
+```bash
+cp .env.example .env.local
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Update `.env.local` with your backend API URL:
+```
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001/api
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Development
 
-## Learn More
+Run the development server:
+```bash
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Build
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Build for production:
+```bash
+npm run build
+```
 
-## Deploy on Vercel
+Start production server:
+```bash
+npm start
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Project Structure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+frontend/
+├── app/                    # Next.js App Router pages
+│   ├── auth/              # Authentication pages
+│   ├── dashboard/         # Dashboard page
+│   ├── problems/          # Problem pages
+│   ├── contests/          # Contest pages
+│   └── admin/             # Admin pages
+├── components/            # React components
+│   ├── ui/               # Reusable UI components
+│   ├── layout/           # Layout components
+│   └── editor/           # Monaco Editor component
+├── hooks/                # Custom React hooks
+├── lib/                  # Utility libraries
+│   ├── api-client.ts    # Axios configuration
+│   ├── auth.ts          # Authentication utilities
+│   └── utils.ts         # Helper functions
+└── types/               # TypeScript type definitions
+```
+
+## Features
+
+- ✅ Authentication (Login/Register)
+- ✅ Dashboard with CodePrint placeholder
+- ✅ Monaco Editor integration
+- ✅ Responsive design with Tailwind CSS
+- ✅ TypeScript for type safety
+- ✅ API client with JWT token management
+- ✅ Protected routes
+
+## Next Steps
+
+1. Connect to backend API endpoints
+2. Implement CodePrint Dashboard with charts
+3. Build Problem solving page with Monaco Editor
+4. Add AI Chat component
+5. Implement Virtual Contest features
+6. Add Learning Paths module
+7. Set up WebSocket for real-time features
+
+## Environment Variables
+
+See `.env.example` for required environment variables.
+
+## License
+
+Private - CodePath Project
