@@ -6,11 +6,18 @@ import { Button } from "../ui/Button";
 import { UserCircle, Menu, X, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+
+const navLinks = [
+  { href: "/", label: "Homepage" },
+  { href: "/about", label: "About Us" },
+  { href: "/contact", label: "Contact Us" },
+];
 
 export default function Header() {
   const { user, logout, isAuthenticated } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -49,17 +56,17 @@ export default function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
-      <div className="flex items-center justify-between px-4 md:px-8 lg:px-14 w-full">
-        <div className="flex items-center justify-between w-full">
-          {/* Logo */}
-          <Link href="/" className="shrink-0">
+    <header className="sticky top-0 z-50 w-full min-h-14 sm:min-h-16 lg:min-h-18 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 border-b border-border/50 lg:border-b-0">
+      <div className="flex items-center justify-between h-14 sm:h-16 lg:h-auto lg:py-5 px-4 sm:px-6 md:px-8 lg:px-14 w-full max-w-[100vw]">
+        <div className="flex items-center justify-between w-full gap-3">
+          {/* Logo - smaller on mobile to leave room for menu */}
+          <Link href="/" className="shrink-0 flex items-center min-w-0">
             <Image 
               src="/logo.png" 
               alt="CodePath" 
               width={80} 
               height={80}
-              className="w-16 h-16 md:w-20 md:h-20"
+              className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 lg:w-20 lg:h-20 object-contain"
             />
           </Link>
 
@@ -67,15 +74,26 @@ export default function Header() {
           <div className="hidden lg:flex items-center justify-end gap-7 flex-1 ml-8">
             {/* Desktop Navigation Links */}
             <div className="flex items-center gap-4 md:gap-6 text-base md:text-xl font-normal">
-              <Link href="/" className="hover:text-accent transition-colors">
-                <span>Homepage</span>
-              </Link>
-              <Link href="/" className="hover:text-accent transition-colors">
-                <span>About Us</span>
-              </Link>
-              <Link href="/" className="hover:text-accent transition-colors">
-                <span>Contact Us</span>
-              </Link>
+              {navLinks.map(({ href, label }) => {
+                const isActive = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={`transition-colors hover:text-accent ${isActive ? "text-accent font-semibold" : ""}`}
+                  >
+                    <span>{label}</span>
+                  </Link>
+                );
+              })}
+              {isAuthenticated && (
+                <Link
+                  href="/dashboard"
+                  className={`transition-colors hover:text-accent ${pathname === "/dashboard" || pathname.startsWith("/dashboard/") ? "text-accent font-semibold" : ""}`}
+                >
+                  <span>Dashboard</span>
+                </Link>
+              )}
             </div>
 
             {/* Desktop Auth Buttons */}
@@ -126,85 +144,93 @@ export default function Header() {
             </div>
           </div>
 
-          {/* Mobile Menu Button */}
+          {/* Mobile Menu Button - larger touch target */}
           <button
-            className="lg:hidden p-2 hover:bg-accent rounded-md transition-colors"
+            type="button"
+            className="lg:hidden flex items-center justify-center w-11 h-11 -mr-2 rounded-lg hover:bg-accent/10 active:scale-95 transition-colors touch-manipulation"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle menu"
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? (
-              <X className="h-6 w-6" />
+              <X className="h-6 w-6 shrink-0" />
             ) : (
-              <Menu className="h-6 w-6" />
+              <Menu className="h-6 w-6 shrink-0" />
             )}
           </button>
         </div>
       </div>
 
-      {/* Mobile Menu */}
-      {mobileMenuOpen && (
-        <div className="lg:hidden border-t border-border bg-background">
-          <div className="flex flex-col px-4 py-4 space-y-4">
-            <Link 
-              href="/" 
-              className="text-lg font-normal hover:text-accent transition-colors"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Homepage
-            </Link>
-            <Link 
-              href="/" 
-              className="text-lg font-normal hover:text-accent transition-colors"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              About Us
-            </Link>
-            <Link 
-              href="/" 
-              className="text-lg font-normal hover:text-accent transition-colors"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Contact Us
-            </Link>
+      {/* Mobile Menu - slide down with proper spacing and touch targets */}
+      <div
+        className={`
+          lg:hidden overflow-hidden transition-all duration-200 ease-out
+          ${mobileMenuOpen ? "max-h-[80vh] opacity-100" : "max-h-0 opacity-0"}
+        `}
+      >
+        <div className="border-t border-border bg-background/98 backdrop-blur-sm">
+          <nav className="flex flex-col px-4 py-4 gap-0" aria-label="Mobile navigation">
+            {navLinks.map(({ href, label }) => {
+              const isActive = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`py-3.5 px-2 text-base font-medium rounded-lg transition-colors -mx-2 hover:text-accent active:bg-accent/10 ${isActive ? "text-accent font-semibold bg-accent/10" : ""}`}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {label}
+                </Link>
+              );
+            })}
+            {isAuthenticated && (
+              <Link
+                href="/dashboard"
+                className={`py-3.5 px-2 text-base font-medium rounded-lg transition-colors -mx-2 hover:text-accent active:bg-accent/10 ${pathname === "/dashboard" || pathname.startsWith("/dashboard/") ? "text-accent font-semibold bg-accent/10" : ""}`}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Dashboard
+              </Link>
+            )}
             {isAuthenticated && (
               <>
-                <div className="flex items-center gap-2 px-2 py-2 border-t border-border mt-2">
-                  <UserCircle className="h-6 w-6 text-primary" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{user?.email?.split("@")[0] || "User"}</p>
-                    <p className="text-xs text-muted-foreground">{user?.email || ""}</p>
+                <div className="flex items-center gap-3 px-2 py-3 mt-2 border-t border-border">
+                  <UserCircle className="h-8 w-8 shrink-0 text-primary" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{user?.email?.split("@")[0] || "User"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user?.email || ""}</p>
                   </div>
                 </div>
                 <Button 
                   variant="destructive"
                   onClick={handleLogout}
-                  className="w-full mt-2"
+                  className="w-full mt-2 h-11 font-medium"
                 >
-                  <LogOut className="h-4 w-4 mr-2" />
+                  <LogOut className="h-4 w-4 mr-2 shrink-0" />
                   Logout
                 </Button>
               </>
             )}
             {!isAuthenticated && (
-              <div className="flex flex-col gap-3 mt-4">
+              <div className="flex flex-col gap-3 mt-4 pt-2 border-t border-border">
                 <Button 
                   variant="outline" 
                   onClick={handleLoginClick}
-                  className="w-full"
+                  className="w-full h-11 font-medium"
                 >
                   Login
                 </Button>
                 <Button 
                   onClick={handleSignUpClick}
-                  className="w-full"
+                  className="w-full h-11 font-medium"
                 >
                   Sign Up
                 </Button>
               </div>
             )}
-          </div>
+          </nav>
         </div>
-      )}
+      </div>
     </header>
   );
 }

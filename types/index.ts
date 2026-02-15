@@ -67,6 +67,43 @@ export interface ProblemsResponse {
   total: number;
   totalPages: number;
   items: CodeforcesProblem[];
+  availableTags?: string[];
+}
+
+/** Single problem detail from GET /problems/:contestId/:index (scraped from Codeforces) */
+export interface CodeforcesProblemDetail {
+  title: string;
+  timeLimit: string;
+  memoryLimit: string;
+  inputFile?: string;
+  outputFile?: string;
+  description: string;
+  inputSpecification: string;
+  outputSpecification: string;
+  sampleTests: Array<{ input: string; output: string }>;
+  note?: string;
+  tags: string[];
+  difficulty: string;
+  statistics?: { solvedCount: number; attemptedCount: number; accuracy: string };
+  raw?: {
+    descriptionHtml?: string;
+    inputSpecHtml?: string;
+    outputSpecHtml?: string;
+    noteHtml?: string;
+  };
+  contestId: number;
+  index: string;
+  problemUrl?: string;
+  fetchedAt?: string;
+}
+
+/** Response from POST /problems/run (Piston code execution) */
+export interface RunCodeResponse {
+  stdout: string;
+  stderr: string;
+  output: string;
+  code: number;
+  signal: string | null;
 }
 
 export interface FavouriteProblem {
@@ -74,6 +111,14 @@ export interface FavouriteProblem {
   externalProblemId: string;
   platform: string;
   createdAt: Date | string;
+}
+
+export interface FavouriteProblemWithDetails extends FavouriteProblem {
+  title?: string;
+  tags?: string[];
+  rating?: number | null;
+  contestId?: number;
+  index?: string;
 }
 
 // Submission Types
@@ -203,10 +248,11 @@ export interface LoginResponse {
   user: User;
 }
 
-// Register Response
+// Register Response - Now returns token and user (same as login) for auto-login
 export interface RegisterResponse {
   message: string;
-  newUserId: string;
+  accessToken: string;
+  user: User;
 }
 
 // Legacy ApiResponse for compatibility (if needed)
@@ -302,9 +348,125 @@ export interface ExternalAccount {
   updatedAt: Date | string;
 }
 
-// Mentee Profile Response
+// Mentee Profile API response - matches GET /users/mentees/profile/view
+export interface MenteeProfileStatistics {
+  problemsSolved: number;
+  quizResult: string;
+}
+
 export interface MenteeProfileResponse {
   mentee: MenteeProfile;
-  externalAccountIntegration: ExternalAccount[];
+  externalAccountIntegration: ExternalAccount | ExternalAccount[] | null;
+  statistics: MenteeProfileStatistics;
+}
+
+// Roadmap Types - Matching backend
+export interface RoadmapSummary {
+  learningPathId: number;
+  learningPathTitle: string;
+  progressPercentage: number;
+  modulesCompleted: number;
+  totalModules: number;
+}
+
+export interface ModuleWithProgress {
+  id: number;
+  title: string;
+  moduleOrder: number | null;
+  totalProblems: number;
+  solvedProblems: number;
+  completionPercentage: number;
+  isCompleted: boolean;
+}
+
+export interface MyRoadmapModulesWithProgress {
+  learningPathId: number;
+  learningPathTitle: string;
+  modules: ModuleWithProgress[];
+  currentModule: ModuleWithProgress | null;
+}
+
+export interface UserAchievement {
+  id: number;
+  achievementId: number;
+  name: string;
+  description: string;
+  achievementType: string;
+  iconUrl: string;
+  progressData: unknown;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PathModuleResource {
+  id: number;
+  pathModuleId: number;
+  resourceType: string;
+  title: string;
+  description?: string;
+  url?: string;
+}
+
+export interface PathModuleProblem {
+  id: number;
+  pathModuleId: number;
+  externalProblemId: string;
+  platform: string;
+}
+
+export interface PathModuleWithDetails {
+  id: number;
+  learningPathId: number;
+  title: string;
+  description: string;
+  moduleResources: PathModuleResource[];
+  moduleProblems: PathModuleProblem[];
+  topic?: { id: number; title: string };
+}
+
+export interface RoadmapWithModules {
+  id: number;
+  title: string;
+  description?: string;
+  skillLevel: string;
+  pathModules: PathModuleWithDetails[];
+}
+
+// Mentee statistics (GET /statistics/mentee) - CodePrint dashboard
+export interface MenteeStatisticsResponse {
+  codePathRating: number;
+  codePathLevel: string;
+  problemsSolved: number;
+  accuracy: number;
+  yourCodePrint: Array<{ topic: string; attempts: number }>;
+  insightsPanel: string;
+}
+
+// CodePrint dashboard - consistency & growth (GET /statistics/mentee/activity, /statistics/mentee/growth)
+export interface ActivityByDateResponse {
+  data: Record<string, number>;
+}
+
+export interface GrowthMonthStat {
+  year: number;
+  month: number;
+  monthLabel: string;
+  submissions: number;
+  problemsSolved: number;
+}
+
+export interface GrowthTimelineResponse {
+  months: GrowthMonthStat[];
+}
+
+// Skill levels (GET /skill-levels) - for manual assessment
+export interface SkillLevel {
+  id: number;
+  title: string;
+  description: string;
+  targetRatingRange: string;
+  expectedKnowledge: string;
+  createdAt: string;
+  updatedAt: string;
 }
 

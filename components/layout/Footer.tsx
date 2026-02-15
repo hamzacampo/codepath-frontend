@@ -8,41 +8,43 @@ export default function Footer() {
   return (
     <footer className="bg-background text-foreground">
       {/* Main Footer Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12 lg:py-16">
-        {/* Mobile Layout */}
-        <div className="lg:hidden space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 lg:py-16">
+        {/* Mobile Layout - single column, larger touch targets */}
+        <div className="lg:hidden flex flex-col gap-8 sm:gap-6">
           {/* Brand Section - Centered on Mobile */}
-          <div className="flex flex-col items-center text-center gap-3 pb-4 border-b border-border">
+          <div className="flex flex-col items-center text-center gap-3 pb-6 border-b border-border">
             <Image 
               src="/logo.png" 
               alt="CodePath" 
               width={80} 
               height={80} 
-              className="w-20 h-20" 
+              className="w-16 h-16 sm:w-20 sm:h-20" 
             />
-            <p className="text-muted-foreground text-sm leading-relaxed max-w-xs">
+            <p className="text-muted-foreground text-sm sm:text-base leading-relaxed max-w-xs px-1">
               Train smarter, compete better, grow together
             </p>
           </div>
 
-          {/* Links Grid - 2 columns on mobile */}
-          <div className="grid grid-cols-2 gap-6">
+          {/* Links & Contact - stacked on mobile, 2 cols from sm */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 sm:gap-6">
             {/* Explore Section */}
-            <div>
-              <h3 className="text-foreground font-bold text-base mb-3 text-center">Explore</h3>
-              <ul className="space-y-2 text-center">
+            <div className="flex flex-col">
+              <h3 className="font-bold text-sm uppercase tracking-wide text-muted-foreground mb-4">
+                Explore
+              </h3>
+              <ul className="space-y-0">
                 <li>
-                  <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors text-sm">
+                  <Link href="/" className="block py-2.5 text-foreground hover:text-accent active:text-accent transition-colors text-sm touch-manipulation -mx-1 px-1 rounded">
                     Homepage
                   </Link>
                 </li>
                 <li>
-                  <Link href="/about" className="text-muted-foreground hover:text-foreground transition-colors text-sm">
+                  <Link href="/about" className="block py-2.5 text-foreground hover:text-accent active:text-accent transition-colors text-sm touch-manipulation -mx-1 px-1 rounded">
                     About Us
                   </Link>
                 </li>
                 <li>
-                  <Link href="/contact" className="text-muted-foreground hover:text-foreground transition-colors text-sm">
+                  <Link href="/contact" className="block py-2.5 text-foreground hover:text-accent active:text-accent transition-colors text-sm touch-manipulation -mx-1 px-1 rounded">
                     Contact Us
                   </Link>
                 </li>
@@ -50,24 +52,26 @@ export default function Footer() {
             </div>
 
             {/* Contact Info Section */}
-            <div>
-              <h3 className="text-foreground font-bold text-base mb-3 text-center">Contact</h3>
-              <ul className="space-y-2">
-                <li className="flex items-start justify-center gap-2">
-                  <Mail className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+            <div className="flex flex-col">
+              <h3 className="font-bold text-sm uppercase tracking-wide text-muted-foreground mb-4">
+                Contact
+              </h3>
+              <ul className="space-y-0">
+                <li>
                   <a 
                     href="mailto:info@codepath.com" 
-                    className="text-muted-foreground hover:text-foreground transition-colors text-sm break-all"
+                    className="flex items-center gap-3 py-2.5 text-foreground hover:text-accent active:text-accent transition-colors text-sm break-all touch-manipulation -mx-1 px-1 rounded"
                   >
+                    <Mail className="w-4 h-4 text-accent shrink-0" />
                     info@codepath.com
                   </a>
                 </li>
-                <li className="flex items-center justify-center gap-2">
-                  <Phone className="w-4 h-4 text-accent shrink-0" />
+                <li>
                   <a 
                     href="tel:+96394413524" 
-                    className="text-muted-foreground hover:text-foreground transition-colors text-sm"
+                    className="flex items-center gap-3 py-2.5 text-foreground hover:text-accent active:text-accent transition-colors text-sm touch-manipulation -mx-1 px-1 rounded"
                   >
+                    <Phone className="w-4 h-4 text-accent shrink-0" />
                     +96394413524
                   </a>
                 </li>
@@ -75,36 +79,38 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Social Media - Centered on Mobile */}
-          <div className="flex flex-col items-center gap-3 pt-4 border-t border-border">
-            <h3 className="text-foreground font-bold text-base">Follow Us</h3>
-            <div className="flex gap-4">
+          {/* Social Media - larger tap targets on mobile */}
+          <div className="flex flex-col items-center gap-4 pt-4 border-t border-border">
+            <h3 className="font-bold text-sm uppercase tracking-wide text-muted-foreground">
+              Follow Us
+            </h3>
+            <div className="flex gap-2">
               <a
                 href="https://facebook.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-accent transition-colors"
+                className="flex items-center justify-center w-12 h-12 rounded-full bg-muted/50 text-muted-foreground hover:text-accent hover:bg-muted transition-colors active:scale-95 touch-manipulation"
                 aria-label="Facebook"
               >
-                <Facebook className="w-6 h-6 text-accent" />
+                <Facebook className="w-5 h-5" />
               </a>
               <a
                 href="https://instagram.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-accent transition-colors"
+                className="flex items-center justify-center w-12 h-12 rounded-full bg-muted/50 text-muted-foreground hover:text-accent hover:bg-muted transition-colors active:scale-95 touch-manipulation"
                 aria-label="Instagram"
               >
-                <Instagram className="w-6 h-6 text-accent" />
+                <Instagram className="w-5 h-5" />
               </a>
               <a
                 href="https://youtube.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-accent transition-colors"
+                className="flex items-center justify-center w-12 h-12 rounded-full bg-muted/50 text-muted-foreground hover:text-accent hover:bg-muted transition-colors active:scale-95 touch-manipulation"
                 aria-label="YouTube"
               >
-                <Youtube className="w-6 h-6 text-accent" />
+                <Youtube className="w-5 h-5" />
               </a>
             </div>
           </div>
@@ -211,7 +217,7 @@ export default function Footer() {
 
       {/* Copyright Section */}
       <div className="border-t border-border bg-card/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 text-center text-muted-foreground text-xs sm:text-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 lg:py-8 text-center text-muted-foreground text-xs sm:text-sm leading-relaxed">
           © {currentYear} CodePath. All rights reserved.
         </div>
       </div>

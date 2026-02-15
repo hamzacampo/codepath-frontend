@@ -28,7 +28,7 @@ export default function CodeEditor({
   readOnly = false,
 }: CodeEditorProps) {
   return (
-    <div className="border rounded-md ">
+    <div className="h-full w-full overflow-hidden">
       <MonacoEditor
         height={height}
         language={language}
@@ -45,6 +45,16 @@ export default function CodeEditor({
           automaticLayout: true,
           tabSize: 2,
           wordWrap: "on",
+          // IDE-like behavior: suggestions, colors, completion
+          suggestOnTriggerCharacters: true,
+          quickSuggestions: { other: true, comments: false, strings: true },
+          acceptSuggestionOnCommitCharacter: true,
+          parameterHints: { enabled: true },
+          hover: { enabled: true },
+          semanticHighlighting: { enabled: true },
+          bracketPairColorization: { enabled: true },
+          folding: true,
+          renderLineHighlight: "all",
         }}
       />
     </div>

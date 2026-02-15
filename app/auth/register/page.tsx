@@ -1,162 +1,257 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthStore } from "@/store/auth-store";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import { Label } from "@/components/ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import { ArrowRight, Loader2 } from "lucide-react";
+import { Icon } from "@iconify/react";
+import Image from "next/image";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
-import { ArrowRight } from "lucide-react";
+import { apiService } from "@/lib/api-service";
+import { Label } from "@/components/ui/Label";
 
-type Step = "personal-info" | "assessment-method" | "skill-level" | "codeforces" | "quiz" | "congratulations";
+type Step =
+  | "personal-info"
+  | "assessment-method"
+  | "codeforces"
+  | "quiz"
+  | "skill-level"
+  | "congratulations";
 
 interface FormData {
   fullName: string;
+  username: string;
   email: string;
   password: string;
   phone: string;
   country: string;
   bio: string;
-  assessmentMethod: "codeforces" | "quiz" | "manual" | "";
-  skillLevel: string;
+  assessmentMethod: "" | "codeforces" | "quiz" | "manual";
   codeforcesHandle: string;
+  skillLevel: string;
   quizAnswers: string[];
+  quizSelectedOptions: Record<number, number>; // question_id -> selected_option index
+  quizId?: number;
+  quizQuestions?: Array<{ id: number; question?: string; questionTitle?: string; options?: string[] }>;
 }
 
 export default function RegisterPage() {
   const [currentStep, setCurrentStep] = useState<Step>("personal-info");
   const [formData, setFormData] = useState<FormData>({
     fullName: "",
+    username: "",
     email: "",
     password: "",
     phone: "",
     country: "",
     bio: "",
     assessmentMethod: "",
-    skillLevel: "",
     codeforcesHandle: "",
+    skillLevel: "",
     quizAnswers: ["", "", ""],
+    quizSelectedOptions: {},
+    quizId: undefined,
+    quizQuestions: undefined,
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { register } = useAuth();
+  const [assessedLevel, setAssessedLevel] = useState<string | null>(null);
+  const justRegisteredRef = useRef(false);
+  const registerMentee = useAuthStore((state) => state.registerMentee);
+  const finalizeRegistration = useAuthStore((state) => state.finalizeRegistration);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authLoading = useAuthStore((state) => state.loading);
   const router = useRouter();
+
+  // Clear "just registered" flag only after we've actually moved to assessment (so redirect effect doesn't run first)
+  useEffect(() => {
+    if (currentStep === "assessment-method") {
+      justRegisteredRef.current = false;
+    }
+  }, [currentStep]);
+
+  // Redirect to dashboard only when already logged in and on step 1 (opened /register while signed in)
+  useEffect(() => {
+    if (authLoading) return;
+    if (isAuthenticated && currentStep === "personal-info" && !justRegisteredRef.current) {
+      router.replace("/dashboard");
+    }
+  }, [authLoading, isAuthenticated, currentStep, router]);
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[calc(100vh-200px)] items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  // Already logged in on step 1 and did not just register → redirecting
+  if (isAuthenticated && currentStep === "personal-info" && !justRegisteredRef.current) {
+    return (
+      <div className="flex min-h-[calc(100vh-200px)] items-center justify-center">
+        <p className="text-muted-foreground">Redirecting to dashboard...</p>
+      </div>
+    );
+  }
 
   const updateFormData = (field: keyof FormData, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleNext = () => {
-    if (currentStep === "personal-info") {
-      // Validate required fields
-      if (!formData.fullName || !formData.email || !formData.password) {
-        setError("Please fill in all required fields");
-        return;
-      }
-      if (formData.password.length < 6) {
-        setError("Password must be at least 6 characters");
-        return;
-      }
-      setError("");
-      setCurrentStep("assessment-method");
-    } else if (currentStep === "assessment-method") {
-      if (!formData.assessmentMethod) {
-        setError("Please select an assessment method");
-        return;
-      }
-      setError("");
-      if (formData.assessmentMethod === "codeforces") {
-        setCurrentStep("codeforces");
-      } else if (formData.assessmentMethod === "quiz") {
-        setCurrentStep("quiz");
-      } else if (formData.assessmentMethod === "manual") {
-        setCurrentStep("skill-level");
-      }
-    } else if (currentStep === "codeforces") {
-      if (!formData.codeforcesHandle) {
-        setError("Please enter your Codeforces handle");
-        return;
-      }
-      setError("");
-      handleRegistration();
-    } else if (currentStep === "quiz") {
-      if (formData.quizAnswers.some((answer) => !answer.trim())) {
-        setError("Please answer all questions");
-        return;
-      }
-      setError("");
-      handleRegistration();
-    } else if (currentStep === "skill-level") {
-      if (!formData.skillLevel) {
-        setError("Please select your skill level");
-        return;
-      }
-      setError("");
-      handleRegistration();
-    }
-  };
-
   const handleRegistration = async () => {
-    setLoading(true);
-    setError("");
-
-    // Generate username from full name or email
-    const username = formData.fullName.split(" ")[0].toLowerCase() || formData.email.split("@")[0];
-
-    // Fetch roles to get Mentee roleId
-    let menteeRoleId: number | undefined;
-    try {
-      const { apiService } = await import("@/lib/api-service");
-      const roles = await apiService.getRoles();
-      const menteeRole = roles.find((r) => r.title === "Mentee");
-      if (!menteeRole) {
-        setError("Mentee role not found. Please contact administrator.");
-        setLoading(false);
-        return;
-      }
-      menteeRoleId = menteeRole.id;
-    } catch (error: any) {
-      setError("Failed to fetch roles. Please try again.");
-      setLoading(false);
+    // Validate required fields according to backend requirements
+    if (!formData.fullName || formData.fullName.length < 6) {
+      setError("Full name must be at least 6 characters");
+      return;
+    }
+    if (!formData.username || formData.username.length < 6) {
+      setError("Username must be at least 6 characters");
+      return;
+    }
+    if (!formData.email) {
+      setError("Email is required");
+      return;
+    }
+    if (!formData.password || formData.password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+    if (!formData.country) {
+      setError("Country is required");
       return;
     }
 
-    const result = await register(
-      username,
-      formData.email,
-      formData.password,
-      formData.codeforcesHandle || undefined,
-      undefined, // leetcodeHandle
-      formData.fullName,
-      formData.phone || undefined,
-      formData.country,
-      formData.bio || undefined,
-      menteeRoleId
-    );
+    setLoading(true);
+    setError("");
+    // Set before calling registerMentee so when auth store updates and re-renders, we don't redirect
+    justRegisteredRef.current = true;
 
-    setLoading(false);
+    try {
+      // Call registerMentee - backend automatically sets roleId to Mentee (user is only registered here)
+      const result = await registerMentee({
+        fullName: formData.fullName,
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        phone: formData.phone || undefined,
+        country: formData.country,
+        bio: formData.bio || undefined,
+      });
 
-    if (result.success) {
-      setCurrentStep("congratulations");
-    } else {
-      setError(result.error || "Registration failed");
+      setLoading(false);
+
+      if (result.success) {
+        setCurrentStep("assessment-method");
+      } else {
+        justRegisteredRef.current = false;
+        setError(result.error || "Registration failed");
+      }
+    } catch (error: any) {
+      setLoading(false);
+      justRegisteredRef.current = false;
+      setError(error.message || "Registration failed. Please try again.");
     }
   };
 
+  // When we just registered, auth store updates before our state — show step 2 until effect runs
+  const displayStep: Step =
+    justRegisteredRef.current && currentStep === "personal-info"
+      ? "assessment-method"
+      : currentStep;
+
   const getStepNumber = () => {
-    if (currentStep === "personal-info") return 1;
-    if (
-      currentStep === "assessment-method" ||
-      currentStep === "codeforces" ||
-      currentStep === "quiz" ||
-      currentStep === "skill-level"
-    )
-      return 2;
-    return 3;
+    if (displayStep === "personal-info") return 1;
+    if (displayStep === "congratulations") return 3;
+    return 2; // assessment-method, codeforces, quiz, skill-level
+  };
+
+  const handleAssessmentNext = () => {
+    if (formData.assessmentMethod === "codeforces") setCurrentStep("codeforces");
+    else if (formData.assessmentMethod === "quiz") setCurrentStep("quiz");
+    else if (formData.assessmentMethod === "manual") setCurrentStep("skill-level");
+  };
+
+  const handleCodeforcesConnect = async () => {
+    if (!formData.codeforcesHandle.trim()) {
+      setError("Enter your Codeforces handle");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const result = await apiService.integrateCodeforces(formData.codeforcesHandle.trim());
+      setAssessedLevel(result.codePathLevel ?? null);
+      finalizeRegistration();
+      setCurrentStep("congratulations");
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || "Failed to connect Codeforces");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSkillLevelNext = async () => {
+    const id = formData.skillLevel ? parseInt(formData.skillLevel, 10) : 0;
+    if (!id) {
+      setError("Choose your level");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const result = await apiService.setMenteeSkillLevel(id);
+      setAssessedLevel(result.skillLevel?.title ?? null);
+      finalizeRegistration();
+      setCurrentStep("congratulations");
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || "Failed to set skill level");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleQuizNext = async () => {
+    const questions = formData.quizQuestions || [];
+    if (!questions.length) {
+      setError("Loading questions...");
+      return;
+    }
+    const allAnswered = questions.every((q) => formData.quizSelectedOptions[q.id] !== undefined);
+    if (!allAnswered) {
+      setError("Please answer all questions");
+      return;
+    }
+    const answers = questions.map((q) => ({
+      question_id: q.id,
+      selected_option: formData.quizSelectedOptions[q.id] as number,
+    }));
+    setLoading(true);
+    setError("");
+    try {
+      const result = await apiService.submitQuiz(
+        answers.map((a) => ({ question_id: a.question_id, selected_option: a.selected_option })),
+        formData.quizId
+      );
+      setAssessedLevel(result.MenteeLevel ?? null);
+      finalizeRegistration();
+      setCurrentStep("congratulations");
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || "Failed to submit quiz");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -175,32 +270,77 @@ export default function RegisterPage() {
           active={getStepNumber() === 2}
           completed={getStepNumber() > 2}
         />
-        <StepIndicator number={3} title="Review results" active={getStepNumber() === 3} completed={false} />
+        <StepIndicator
+          number={3}
+          title="Review results"
+          active={getStepNumber() === 3}
+          completed={false}
+        />
       </div>
 
       {/* Main content */}
       <div className="w-full lg:w-1/2 flex items-center justify-center">
-        {currentStep === "personal-info" && (
-          <PersonalInfoStep formData={formData} updateFormData={updateFormData} onNext={handleNext} error={error} />
+        {displayStep === "personal-info" && (
+          <PersonalInfoStep
+            formData={formData}
+            updateFormData={updateFormData}
+            onRegister={handleRegistration}
+            error={error}
+            loading={loading}
+          />
         )}
 
-        {currentStep === "assessment-method" && (
-          <AssessmentMethodStep formData={formData} updateFormData={updateFormData} onNext={handleNext} error={error} />
+        {displayStep === "assessment-method" && (
+          <AssessmentMethodStep
+            formData={formData}
+            updateFormData={updateFormData}
+            onNext={handleAssessmentNext}
+            error={error}
+          />
         )}
 
-        {currentStep === "skill-level" && (
-          <SkillLevelStep formData={formData} updateFormData={updateFormData} onNext={handleNext} error={error} />
+        {displayStep === "skill-level" && (
+          <SkillLevelStep
+            formData={formData}
+            updateFormData={updateFormData}
+            onNext={handleSkillLevelNext}
+            onBack={() => setCurrentStep("assessment-method")}
+            error={error}
+            loading={loading}
+          />
         )}
 
-        {currentStep === "codeforces" && (
-          <CodeforcesStep formData={formData} updateFormData={updateFormData} onNext={handleNext} error={error} />
+        {displayStep === "codeforces" && (
+          <CodeforcesStep
+            formData={formData}
+            updateFormData={updateFormData}
+            onConnect={handleCodeforcesConnect}
+            onBack={() => setCurrentStep("assessment-method")}
+            error={error}
+            loading={loading}
+          />
         )}
 
-        {currentStep === "quiz" && (
-          <QuizStep formData={formData} updateFormData={updateFormData} onNext={handleNext} error={error} />
+        {displayStep === "quiz" && (
+          <QuizStep
+            formData={formData}
+            updateFormData={updateFormData}
+            onNext={handleQuizNext}
+            onBack={() => setCurrentStep("assessment-method")}
+            onCompleteDbQuiz={(level) => {
+              setAssessedLevel(level);
+              finalizeRegistration();
+              setCurrentStep("congratulations");
+            }}
+            onDbSubmitError={(message) => setError(message)}
+            error={error}
+            loading={loading}
+          />
         )}
 
-        {currentStep === "congratulations" && <CongratulationsStep router={router} />}
+        {displayStep === "congratulations" && (
+          <CongratulationsStep router={router} level={assessedLevel} />
+        )}
       </div>
     </div>
   );
@@ -217,26 +357,35 @@ function StepIndicator({
   active: boolean;
   completed: boolean;
 }) {
+  const highlighted = active || completed;
   return (
     <div className="flex gap-3 shrink-0">
       <div className="flex flex-col items-center gap-2">
         <div
           className={`
           flex items-center justify-center w-10 h-10 rounded-full border-4 text-xl font-bold shrink-0 bg-transparent
-          ${active ? "border-accent text-accent" : completed ? "border-primary text-primary" : "border-white text-white"}
+          ${highlighted ? "border-accent text-accent" : "border-foreground text-foreground"}
         `}
         >
           {number}
         </div>
         {number < 3 && (
           <div className="hidden lg:flex flex-col gap-4">
-            <div className={`w-2 h-2 rounded-full border-2 bg-transparent ${active ? "border-accent" : completed ? "border-primary" : "border-white"}`} />
-            <div className={`w-2 h-2 rounded-full border-2 bg-transparent ${active ? "border-accent" : completed ? "border-primary" : "border-white"}`} />
-            <div className={`w-2 h-2 rounded-full border-2 bg-transparent ${active ? "border-accent" : completed ? "border-primary" : "border-white"}`} />
+            <div
+              className={`w-2 h-2 rounded-full border-2 bg-transparent ${highlighted ? "border-accent" : "border-foreground"}`}
+            />
+            <div
+              className={`w-2 h-2 rounded-full border-2 bg-transparent ${highlighted ? "border-accent" : "border-foreground"}`}
+            />
+            <div
+              className={`w-2 h-2 rounded-full border-2 bg-transparent ${highlighted ? "border-accent" : "border-foreground"}`}
+            />
           </div>
         )}
       </div>
-      <span className={`text-xs lg:text-2xl pt-1.5 whitespace-nowrap ${active ? "text-accent" : completed ? "text-primary" : "text-white"}`}>
+      <span
+        className={`text-xs lg:text-2xl pt-1.5 whitespace-nowrap ${highlighted ? "text-accent" : "text-foreground"}`}
+      >
         {title}
       </span>
     </div>
@@ -246,17 +395,21 @@ function StepIndicator({
 function PersonalInfoStep({
   formData,
   updateFormData,
-  onNext,
+  onRegister,
   error,
+  loading,
 }: {
   formData: FormData;
   updateFormData: (field: keyof FormData, value: any) => void;
-  onNext: () => void;
+  onRegister: () => void;
   error: string;
+  loading: boolean;
 }) {
   return (
-    <div className="bg-gradient-to-b from-[#FFFFFF]/25 from-0% via-[#FFFFFF]/20 via-50% to-[#FFFFFF]/6 to-100% rounded-2xl p-6 md:p-8 w-[456px] border border-black">
-      <h2 className="text-2xl font-bold text-foreground text-center mb-2">Register with CodePath</h2>
+    <div className="bg-linear-to-b from-[#FFFFFF]/25 from-0% via-[#FFFFFF]/20 via-50% to-[#FFFFFF]/6 to-100% rounded-2xl p-6 md:p-8 w-full max-w-[560px] border border-black">
+      <h2 className="text-2xl font-bold text-foreground text-center mb-2">
+        Register with CodePath
+      </h2>
       <p className="text-muted-foreground text-center text-sm mb-6">
         Sign up to track your progress and unlock your full potential
       </p>
@@ -269,9 +422,17 @@ function PersonalInfoStep({
 
       <div className="space-y-6">
         <Input
-          placeholder="Full Name"
+          placeholder="Full Name (min 6 characters)"
           value={formData.fullName}
           onChange={(e) => updateFormData("fullName", e.target.value)}
+          required
+        />
+
+        <Input
+          placeholder="Username (min 6 characters)"
+          value={formData.username}
+          onChange={(e) => updateFormData("username", e.target.value)}
+          required
         />
 
         <Input
@@ -279,18 +440,20 @@ function PersonalInfoStep({
           placeholder="Email"
           value={formData.email}
           onChange={(e) => updateFormData("email", e.target.value)}
+          required
         />
 
         <Input
           type="password"
-          placeholder="Password"
+          placeholder="Password (min 8 characters)"
           value={formData.password}
           onChange={(e) => updateFormData("password", e.target.value)}
+          required
         />
 
         <Input
           type="tel"
-          placeholder="Phone"
+          placeholder="Phone (optional)"
           value={formData.phone}
           onChange={(e) => updateFormData("phone", e.target.value)}
         />
@@ -299,7 +462,7 @@ function PersonalInfoStep({
           value={formData.country}
           onChange={(e) => updateFormData("country", e.target.value)}
         >
-          <option value="">Choose a country</option>
+          <option value="">Choose a country *</option>
           <option value="us">United States</option>
           <option value="uk">United Kingdom</option>
           <option value="ca">Canada</option>
@@ -308,7 +471,7 @@ function PersonalInfoStep({
         </Select>
 
         <Textarea
-          placeholder="Tell us about yourself"
+          placeholder="Tell us about yourself (optional)"
           value={formData.bio}
           onChange={(e) => updateFormData("bio", e.target.value)}
           className="min-h-[100px]"
@@ -316,14 +479,30 @@ function PersonalInfoStep({
       </div>
 
       <div className="flex justify-end mt-6">
-        <Button onClick={onNext} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-          Next <ArrowRight className="ml-2 h-4 w-4" />
+        <Button
+          onClick={onRegister}
+          disabled={loading}
+          className="bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Registering...
+            </>
+          ) : (
+            <>
+              Register <ArrowRight className="ml-2 h-4 w-4" />
+            </>
+          )}
         </Button>
       </div>
 
       <p className="text-center text-sm text-muted-foreground mt-4">
         Already have an account?{" "}
-        <Link href="/auth/login" className="text-foreground hover:text-accent hover:underline">
+        <Link
+          href="/auth/login"
+          className="text-foreground hover:text-accent hover:underline"
+        >
           Login
         </Link>
       </p>
@@ -343,10 +522,10 @@ function AssessmentMethodStep({
   error: string;
 }) {
   return (
-    <div className="bg-gradient-to-b from-[#FFFFFF]/25 from-0% via-[#FFFFFF]/20 via-50% to-[#FFFFFF]/6 to-100% rounded-2xl p-6 md:p-8 w-[456px] border border-black">
+    <div className="bg-linear-to-b from-[#FFFFFF]/25 from-0% via-[#FFFFFF]/20 via-50% to-[#FFFFFF]/6 to-100% rounded-2xl p-6 md:p-8 w-full max-w-[560px] border border-black">
       <h2 className="text-2xl font-bold text-foreground text-center mb-2">Choose Assessment Method</h2>
       <p className="text-muted-foreground text-center text-sm mb-8">
-        Choose how you'd like us to assess your current skill level
+        Choose how you&apos;d like us to assess your current skill level
       </p>
 
       {error && (
@@ -357,12 +536,12 @@ function AssessmentMethodStep({
 
       <RadioGroup
         value={formData.assessmentMethod}
-        onValueChange={(value) => updateFormData("assessmentMethod", value as any)}
+        onValueChange={(value) => updateFormData("assessmentMethod", value as FormData["assessmentMethod"])}
         className="space-y-4"
       >
         <label
           className={`
-            flex items-center gap-3 p-4 rounded-lg cursor-pointer transition-colors
+            flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors
             ${formData.assessmentMethod === "codeforces" ? "bg-primary" : "bg-primary/80 hover:bg-primary"}
           `}
         >
@@ -372,7 +551,7 @@ function AssessmentMethodStep({
 
         <label
           className={`
-            flex items-center gap-3 p-4 rounded-lg cursor-pointer transition-colors
+            flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors
             ${formData.assessmentMethod === "quiz" ? "bg-primary" : "bg-primary/80 hover:bg-primary"}
           `}
         >
@@ -382,7 +561,7 @@ function AssessmentMethodStep({
 
         <label
           className={`
-            flex items-center gap-3 p-4 rounded-lg cursor-pointer transition-colors
+            flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors
             ${formData.assessmentMethod === "manual" ? "bg-primary" : "bg-primary/80 hover:bg-primary"}
           `}
         >
@@ -408,15 +587,24 @@ function SkillLevelStep({
   formData,
   updateFormData,
   onNext,
+  onBack,
   error,
+  loading,
 }: {
   formData: FormData;
   updateFormData: (field: keyof FormData, value: any) => void;
   onNext: () => void;
+  onBack: () => void;
   error: string;
+  loading: boolean;
 }) {
+  const [levels, setLevels] = useState<{ id: number; title: string }[]>([]);
+  useEffect(() => {
+    apiService.getSkillLevels().then((list) => setLevels(list.map((l) => ({ id: l.id, title: l.title }))));
+  }, []);
+
   return (
-    <div className="bg-gradient-to-b from-[#FFFFFF]/25 from-0% via-[#FFFFFF]/20 via-50% to-[#FFFFFF]/6 to-100% rounded-2xl p-6 md:p-8 w-[456px] border border-black">
+    <div className="bg-linear-to-b from-[#FFFFFF]/25 from-0% via-[#FFFFFF]/20 via-50% to-[#FFFFFF]/6 to-100% rounded-2xl p-6 md:p-8 w-full max-w-[560px] border border-black">
       <h2 className="text-2xl font-bold text-foreground text-center mb-2">Choose your skills level</h2>
       <p className="text-muted-foreground text-center text-sm mb-8">Choose your skills level from the menu below</p>
 
@@ -430,21 +618,39 @@ function SkillLevelStep({
         value={formData.skillLevel}
         onChange={(e) => updateFormData("skillLevel", e.target.value)}
         className="h-12"
+        placeholder="Choose your level"
       >
-        <option value="">Choose your level</option>
-        <option value="beginner">Beginner</option>
-        <option value="intermediate">Intermediate</option>
-        <option value="advanced">Advanced</option>
-        <option value="expert">Expert</option>
+        {levels.map((l) => (
+          <option key={l.id} value={String(l.id)}>
+            {l.title}
+          </option>
+        ))}
       </Select>
 
-      <div className="flex justify-end mt-8">
+      <div className="flex flex-nowrap items-center justify-between gap-2 mt-8">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onBack}
+          className="shrink-0 text-xs sm:text-sm border-primary-foreground/50 text-primary-foreground hover:bg-primary-foreground/10 whitespace-nowrap"
+        >
+          Choose another method
+        </Button>
         <Button
           onClick={onNext}
-          disabled={!formData.skillLevel}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50"
+          disabled={!formData.skillLevel || loading}
+          className="shrink-0 text-xs sm:text-sm bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50 whitespace-nowrap"
         >
-          Next <ArrowRight className="ml-2 h-4 w-4" />
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              Next <ArrowRight className="ml-2 h-4 w-4" />
+            </>
+          )}
         </Button>
       </div>
     </div>
@@ -454,16 +660,20 @@ function SkillLevelStep({
 function CodeforcesStep({
   formData,
   updateFormData,
-  onNext,
+  onConnect,
+  onBack,
   error,
+  loading,
 }: {
   formData: FormData;
   updateFormData: (field: keyof FormData, value: any) => void;
-  onNext: () => void;
+  onConnect: () => void;
+  onBack: () => void;
   error: string;
+  loading: boolean;
 }) {
   return (
-    <div className="bg-gradient-to-b from-[#FFFFFF]/25 from-0% via-[#FFFFFF]/20 via-50% to-[#FFFFFF]/6 to-100% rounded-2xl p-6 md:p-8 w-[456px] border border-black">
+    <div className="bg-linear-to-b from-[#FFFFFF]/25 from-0% via-[#FFFFFF]/20 via-50% to-[#FFFFFF]/6 to-100% rounded-2xl p-6 md:p-8 w-full max-w-[560px] border border-black">
       <h2 className="text-2xl font-bold text-foreground text-center mb-2">Connect to your Codeforces Account</h2>
       <p className="text-muted-foreground text-center text-sm mb-8">
         Enter your Codeforces handle and we will analyze your skills based on your account details and submissions.
@@ -481,38 +691,161 @@ function CodeforcesStep({
         onChange={(e) => updateFormData("codeforcesHandle", e.target.value)}
       />
 
-      <div className="flex justify-end mt-8">
+      <div className="flex flex-nowrap items-center justify-between gap-2 mt-8">
         <Button
-          onClick={onNext}
-          disabled={!formData.codeforcesHandle}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50"
+          type="button"
+          variant="outline"
+          onClick={onBack}
+          className="shrink-0 text-xs sm:text-sm border-primary-foreground/50 text-primary-foreground hover:bg-primary-foreground/10 whitespace-nowrap"
         >
-          Connect <ArrowRight className="ml-2 h-4 w-4" />
+          Choose another method
+        </Button>
+        <Button
+          onClick={onConnect}
+          disabled={!formData.codeforcesHandle.trim() || loading}
+          className="shrink-0 text-xs sm:text-sm bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50 whitespace-nowrap"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Connecting...
+            </>
+          ) : (
+            <>
+              Connect <ArrowRight className="ml-2 h-4 w-4" />
+            </>
+          )}
         </Button>
       </div>
     </div>
   );
 }
 
+type QuizQuestionShape = {
+  id: number;
+  question?: string;
+  questionTitle?: string;
+  options?: string[];
+};
+
+function normalizeQuizResponse(data: any): { quizId?: number; questions: QuizQuestionShape[] } {
+  const rawQuestions = data?.questions ?? data?.items ?? data?.question_list ?? [];
+  const questions: QuizQuestionShape[] = Array.isArray(rawQuestions)
+    ? rawQuestions.map((q: any, idx: number) => ({
+        id: q.id ?? q.question_id ?? idx + 1,
+        questionTitle: q.questionTitle ?? q.question ?? q.title ?? "",
+        question: q.question ?? q.questionTitle ?? q.title ?? "",
+        options: Array.isArray(q.options) ? q.options : Array.isArray(q.choices) ? q.choices : [],
+      }))
+    : [];
+  return { quizId: data?.quizId ?? data?.quiz_id, questions };
+}
+
 function QuizStep({
   formData,
   updateFormData,
   onNext,
+  onBack,
+  onCompleteDbQuiz,
+  onDbSubmitError,
   error,
+  loading,
 }: {
   formData: FormData;
   updateFormData: (field: keyof FormData, value: any) => void;
   onNext: () => void;
+  onBack: () => void;
+  /** Called when DB quiz is submitted with (level from server); parent should set level and go to congratulations */
+  onCompleteDbQuiz?: (level: string) => void;
+  onDbSubmitError?: (message: string) => void;
   error: string;
+  loading: boolean;
 }) {
-  const updateQuizAnswer = (index: number, value: string) => {
-    const newAnswers = [...formData.quizAnswers];
-    newAnswers[index] = value;
-    updateFormData("quizAnswers", newAnswers);
+  const [fetching, setFetching] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [dbQuizMode, setDbQuizMode] = useState(false);
+  const [submittingDb, setSubmittingDb] = useState(false);
+
+  const loadQuiz = () => {
+    setFetching(true);
+    setFetchError(null);
+    setDbQuizMode(false);
+
+    const applyDbQuestions = (response: unknown) => {
+      const list = Array.isArray(response)
+        ? response
+        : Array.isArray((response as any)?.questions)
+          ? (response as any).questions
+          : Array.isArray((response as any)?.data)
+            ? (response as any).data
+            : [];
+      if (list.length === 0) return false;
+      const questions: QuizQuestionShape[] = list.map((q: any) => {
+        const title =
+          q.questionTitle ??
+          q.question_title ??
+          q.question ??
+          (typeof q.title === "string" ? q.title : "") ??
+          "";
+        return {
+          id: Number(q.id),
+          questionTitle: title,
+          question: title,
+          options: [],
+        };
+      });
+      updateFormData("quizId", undefined);
+      updateFormData("quizQuestions", questions);
+      updateFormData("quizAnswers", questions.map(() => ""));
+      setDbQuizMode(true);
+      setFetching(false);
+      return true;
+    };
+
+    const applyAiResponse = (aiData: any) => {
+      const { quizId, questions } = normalizeQuizResponse(aiData);
+      if (questions.length > 0) {
+        updateFormData("quizId", quizId);
+        updateFormData("quizQuestions", questions);
+        updateFormData("quizAnswers", questions.map(() => ""));
+        setDbQuizMode(false);
+        setFetching(false);
+        return;
+      }
+      setFetchError("No quiz questions available. Please choose Codeforces or manual level.");
+      setFetching(false);
+    };
+
+    // 1) Try DB quiz first — fetch all questions from QuizQuestion table
+    apiService
+      .getQuizAll()
+      .then((dbQuestions) => {
+        if (applyDbQuestions(dbQuestions)) return;
+        return apiService.getQuizStart(3).then(applyAiResponse);
+      })
+      .catch(() => {
+        return apiService.getQuizStart(3).then(applyAiResponse);
+      })
+      .catch((err) => {
+        setFetchError(
+          err?.response?.data?.message || err?.message || "Couldn't load quiz. Try again or choose Codeforces / manual level."
+        );
+        setFetching(false);
+      });
+  };
+
+  useEffect(() => {
+    loadQuiz();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const questions = formData.quizQuestions ?? [];
+  const setSelectedOption = (questionId: number, optionIndex: number) => {
+    updateFormData("quizSelectedOptions", { ...formData.quizSelectedOptions, [questionId]: optionIndex });
   };
 
   return (
-    <div className="bg-gradient-to-b from-[#FFFFFF]/25 from-0% via-[#FFFFFF]/20 via-50% to-[#FFFFFF]/6 to-100% rounded-2xl p-6 md:p-8 w-[456px] border border-black">
+    <div className="bg-linear-to-b from-[#FFFFFF]/25 from-0% via-[#FFFFFF]/20 via-50% to-[#FFFFFF]/6 to-100% rounded-2xl p-6 md:p-8 w-full max-w-[560px] border border-black">
       <h2 className="text-2xl font-bold text-foreground text-center mb-2">Take a placement quiz</h2>
       <p className="text-muted-foreground text-center text-sm mb-8">
         Answer the following questions below to help us analyze your skills.
@@ -524,46 +857,177 @@ function QuizStep({
         </div>
       )}
 
-      <div className="space-y-6">
-        {[0, 1, 2].map((index) => (
-          <div key={index}>
-            <Label className="text-foreground mb-2 block">Question {index + 1}</Label>
-            <Textarea
-              placeholder="Answer here"
-              value={formData.quizAnswers[index]}
-              onChange={(e) => updateQuizAnswer(index, e.target.value)}
-              className="min-h-[80px]"
-            />
-          </div>
-        ))}
-      </div>
+      {fetchError && (
+        <div className="p-3 text-sm text-amber-600 bg-amber-500/10 rounded-md border border-amber-500/20 mb-4">
+          {fetchError}
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-full"
+            onClick={loadQuiz}
+          >
+            Retry
+          </Button>
+        </div>
+      )}
 
-      <div className="flex justify-end mt-8">
-        <Button onClick={onNext} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-          Next <ArrowRight className="ml-2 h-4 w-4" />
-        </Button>
+      {fetching ? (
+        <p className="text-muted-foreground text-center py-6">Loading questions...</p>
+      ) : (
+        <div className="space-y-6">
+          {questions.map((q, idx) => {
+            const title =
+              (q as any).questionTitle ??
+              (q as any).question_title ??
+              q.question ??
+              `Question ${idx + 1}`;
+            const options = q.options ?? [];
+            const selected = formData.quizSelectedOptions[q.id];
+            return (
+              <div key={q.id}>
+                <Label className="text-foreground font-semibold mb-2 block">
+                  {title ? `Question #${idx + 1}: ${title}` : `Question #${idx + 1}`}
+                </Label>
+                {options.length ? (
+                  <RadioGroup
+                    value={selected !== undefined ? String(selected) : ""}
+                    onValueChange={(v) => setSelectedOption(q.id, parseInt(v, 10))}
+                    className="space-y-2"
+                  >
+                    {options.map((opt, i) => (
+                      <label
+                        key={i}
+                        className="flex items-center gap-2 p-2 rounded-lg border border-input cursor-pointer hover:bg-muted/50"
+                      >
+                        <RadioGroupItem value={String(i)} id={`q-${q.id}-${i}`} />
+                        <span>{opt}</span>
+                      </label>
+                    ))}
+                  </RadioGroup>
+                ) : (
+                  <Textarea
+                    placeholder="Answer here"
+                    value={(formData.quizAnswers ?? [])[idx] ?? ""}
+                    onChange={(e) => {
+                      const answers = formData.quizAnswers ?? [];
+                      const next = [...answers];
+                      while (next.length <= idx) next.push("");
+                      next[idx] = e.target.value;
+                      updateFormData("quizAnswers", next);
+                    }}
+                    className="min-h-[80px]"
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex flex-nowrap items-center justify-between gap-2 mt-8">
+        {!fetching && questions.length > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onBack}
+            className="shrink-0 text-xs sm:text-sm border-primary-foreground/50 text-primary-foreground hover:bg-primary-foreground/10 whitespace-nowrap"
+          >
+            Choose another method
+          </Button>
+        )}
+        <div className="flex shrink-0">
+          {!fetching && questions.length > 0 && dbQuizMode && onCompleteDbQuiz && (
+            <Button
+              type="button"
+              disabled={submittingDb}
+              onClick={async () => {
+                const questions = formData.quizQuestions ?? [];
+                const answers = formData.quizAnswers ?? [];
+                const payload = questions.map((q, idx) => ({
+                  questionId: q.id,
+                  userAnswer: answers[idx] ?? "",
+                }));
+                setSubmittingDb(true);
+                try {
+                  const result = await apiService.submitQuizDB(payload);
+                  onCompleteDbQuiz(result.level);
+                } catch (err: any) {
+                  setSubmittingDb(false);
+                  onDbSubmitError?.(err?.response?.data?.message || err?.message || "Failed to submit quiz");
+                }
+              }}
+              className="text-xs sm:text-sm bg-primary hover:bg-primary/90 text-primary-foreground whitespace-nowrap disabled:opacity-50"
+            >
+              {submittingDb ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>Submit answers & continue <ArrowRight className="ml-2 h-4 w-4" /></>
+              )}
+            </Button>
+          )}
+          {!fetching && questions.length > 0 && !dbQuizMode && (
+            <Button
+              onClick={onNext}
+              disabled={loading}
+              className="text-xs sm:text-sm bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50 whitespace-nowrap"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  Next <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function CongratulationsStep({ router }: { router: any }) {
+function CongratulationsStep({ router, level }: { router: any; level?: string | null }) {
+  const displayLevel = level && level.trim() !== "" ? level : "Not assessed yet";
   return (
-    <div className="bg-gradient-to-br from-primary to-primary/80 rounded-2xl p-12 max-w-xl text-center border border-border">
-      <h2 className="text-3xl font-bold text-primary-foreground mb-4">Congratulations 🎉</h2>
+    <div className="relative bg-[#473961] rounded-3xl p-8 pt-50 max-w-md w-full text-center border border-[#4a3a6a] shadow-[0_0_60px_rgba(139,92,246,0.15)]">
+      <div className="absolute left-1/2 -translate-x-1/2 -top-10 w-60 h-60">
+        <Image
+          src="/colorful-balloons-celebration.png"
+          alt="Celebration balloons"
+          fill
+          className="object-contain"
+        />
+      </div>
 
-      <p className="text-primary-foreground/90 mb-2">Your CodePrint is ready!</p>
-      <p className="text-primary-foreground/90 mb-6">Let's start your training journey</p>
+      <div className="text-center mb-6">
+        <span className="inline-block relative">
+          <h2 className="text-3xl font-bold text-white w-fit">Congratulations</h2>
+          <Icon
+            icon="mingcute:celebrate-fill"
+            className="w-10 h-10 text-primary-foreground absolute top-1/2 -translate-y-1/2 left-full ml-2"
+          />
+        </span>
+      </div>
 
-      <p className="text-primary-foreground text-lg mb-8">
-        Your level is <span className="font-bold">Advanced</span>
+      <p className="text-gray-300 mb-1">Your CodePrint is ready!</p>
+      <p className="text-gray-300 mb-8">Let&apos;s start your training journey</p>
+
+      <p className="text-white text-xl mb-8">
+        Your level is <span className="font-bold">{displayLevel}</span>
       </p>
 
       <Button
-        onClick={() => router.push("/")}
-        className="bg-primary-foreground text-primary hover:bg-primary-foreground/90"
+        onClick={() => router.push("/dashboard")}
+        className="bg-[#7c3aed] hover:bg-[#6d28d9] text-white px-8 py-3 rounded-full text-base font-medium"
       >
-        Go to Home <ArrowRight className="ml-2 h-4 w-4" />
+        Proceed to dashboard
+        <ArrowRight className="ml-2 h-4 w-4" />
       </Button>
     </div>
   );

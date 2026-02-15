@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
@@ -20,8 +20,22 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      router.replace("/dashboard");
+    }
+  }, [isAuthenticated, authLoading, router]);
+
+  if (authLoading || isAuthenticated) {
+    return (
+      <div className="flex min-h-[calc(100vh-200px)] items-center justify-center">
+        <p className="text-muted-foreground">Redirecting...</p>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +46,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (result.success) {
-      router.push("/");
+      router.push("/dashboard");
     } else {
       setError(result.error || "Login failed");
     }
@@ -40,7 +54,7 @@ export default function LoginPage() {
 
   return (
     <div className="w-full flex flex-col-reverse lg:flex-row items-center justify-center gap-8 lg:gap-12 min-h-[calc(100vh-200px)] px-4">
-      <Card className="w-full max-w-md bg-gradient-to-b from-[#FFFFFF]/25 from-0% via-[#FFFFFF]/20 via-50% to-[#FFFFFF]/6 to-100% min-h-[449px]">
+      <Card className="w-full max-w-md bg-linear-to-b from-[#FFFFFF]/25 from-0% via-[#FFFFFF]/20 via-50% to-[#FFFFFF]/6 to-100% min-h-[449px]">
         <CardHeader>
           <CardTitle>Login</CardTitle>
           <CardDescription>

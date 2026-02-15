@@ -2,6 +2,17 @@ import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from "ax
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001";
 
+/** In-memory token used between register (step 1) and completion of step 2 — not persisted until step 2 is done */
+let pendingAuthToken: string | null = null;
+
+export function setPendingAuthToken(token: string | null): void {
+  pendingAuthToken = token;
+}
+
+export function getPendingAuthToken(): string | null {
+  return pendingAuthToken;
+}
+
 /**
  * Create axios instance with default configuration
  */
@@ -14,12 +25,12 @@ const apiClient: AxiosInstance = axios.create({
 });
 
 /**
- * Request interceptor to add auth token
+ * Request interceptor to add auth token (pending token first, then persisted)
  */
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     if (typeof window !== "undefined") {
-      const token = localStorage.getItem("accessToken");
+      const token = pendingAuthToken || localStorage.getItem("accessToken");
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -41,6 +52,7 @@ apiClient.interceptors.response.use(
     // Handle 401 Unauthorized - token expired or invalid
     if (error.response?.status === 401) {
       if (typeof window !== "undefined") {
+        pendingAuthToken = null;
         localStorage.removeItem("accessToken");
         localStorage.removeItem("user");
         window.location.href = "/auth/login";

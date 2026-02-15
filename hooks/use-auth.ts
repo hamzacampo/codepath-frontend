@@ -1,49 +1,46 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import * as authLib from "@/lib/auth";
+import { useAuthStore } from "@/store/auth-store";
 import { apiService } from "@/lib/api-service";
-import type { User, LoginResponse, RegisterResponse } from "@/types";
 
+/**
+ * useAuth hook - Wrapper around Zustand auth store
+ * Provides the same interface as before but uses global Zustand store
+ * This ensures user state is shared across all components
+ */
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const {
+    user,
+    loading,
+    isAuthenticated,
+    login: storeLogin,
+    registerMentee: storeRegisterMentee,
+    logout: storeLogout,
+    updateUser: storeUpdateUser,
+    initialize,
+  } = useAuthStore();
 
+  // Initialize auth state on mount
   useEffect(() => {
-    // Load user from localStorage on mount
-    const storedUser = authLib.getUser();
-    if (storedUser && authLib.isAuthenticated()) {
-      setUser(storedUser);
-    }
-    setLoading(false);
-  }, []);
+    initialize();
+  }, [initialize]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    try {
-      const response: LoginResponse = await apiService.login(email, password);
-      
-      // Backend returns: { message, accessToken, user: { id, email, role } }
-      if (response.accessToken && response.user) {
-        authLib.setAuthTokens({ accessToken: response.accessToken });
-        authLib.setUser(response.user);
-        setUser(response.user);
-        return { success: true };
-      } else {
-        return {
-          success: false,
-          error: response.message || "Login failed",
-        };
+  // Wrapper for login with router redirect to dashboard
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const result = await storeLogin(email, password);
+      if (result.success) {
+        router.push("/dashboard");
       }
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.response?.data?.message || error.message || "Login failed",
-      };
-    }
-  }, []);
+      return result;
+    },
+    [storeLogin, router]
+  );
 
+  // Wrapper for registerMentee - roleId is automatically set by backend
   const registerMentee = useCallback(
     async (data: {
       fullName: string;
@@ -53,32 +50,13 @@ export function useAuth() {
       phone?: string;
       country: string;
       bio?: string;
-      roleId: number;
     }) => {
-      try {
-        const response: RegisterResponse = await apiService.registerMentee(data);
-        
-        // Backend returns: { message, newUserId }
-        if (response.newUserId) {
-          return { success: true, userId: response.newUserId };
-        } else {
-          return {
-            success: false,
-            error: response.message || "Registration failed",
-          };
-        }
-      } catch (error: any) {
-        return {
-          success: false,
-          error: error.response?.data?.message || error.message || "Registration failed",
-        };
-      }
+      return await storeRegisterMentee(data);
     },
-    []
+    [storeRegisterMentee]
   );
 
   // Legacy register method for backward compatibility
-  // Note: This requires roleId, so caller should fetch roles first
   const register = useCallback(
     async (
       username: string,
@@ -90,30 +68,10 @@ export function useAuth() {
       phone?: string,
       country?: string,
       bio?: string,
-      roleId?: number
+      roleId?: number // Deprecated - backend automatically sets roleId
     ) => {
-      // If roleId is not provided, try to fetch it (Mentee role)
-      let menteeRoleId = roleId;
-      if (!menteeRoleId) {
-        try {
-          const roles = await apiService.getRoles();
-          const menteeRole = roles.find((r) => r.title === "Mentee");
-          if (!menteeRole) {
-            return {
-              success: false,
-              error: "Mentee role not found. Please contact administrator.",
-            };
-          }
-          menteeRoleId = menteeRole.id;
-        } catch (error: any) {
-          return {
-            success: false,
-            error: "Failed to fetch roles. Please try again.",
-          };
-        }
-      }
-
-      const result = await registerMentee({
+      // Backend automatically sets roleId to Mentee, so we don't need to fetch it
+      return await storeRegisterMentee({
         fullName: fullName || username,
         username,
         email,
@@ -121,36 +79,28 @@ export function useAuth() {
         phone,
         country: country || "",
         bio,
-        roleId: menteeRoleId!,
       });
-
-      return result;
     },
-    [registerMentee]
+    [storeRegisterMentee]
   );
 
+  // Wrapper for logout with router redirect
   const logout = useCallback(() => {
-    authLib.clearAuthTokens();
-    setUser(null);
+    storeLogout();
     router.push("/auth/login");
-  }, [router]);
-
-  const updateUser = useCallback((updatedUser: User) => {
-    authLib.setUser(updatedUser);
-    setUser(updatedUser);
-  }, []);
+  }, [storeLogout, router]);
 
   return {
     user,
     loading,
-    isAuthenticated: !!user,
-    isAdmin: authLib.isAdmin(),
-    isMentee: authLib.isMentee(),
+    isAuthenticated,
+    isAdmin: user?.role === "Admin",
+    isMentee: user?.role === "Mentee",
     login,
     register,
     registerMentee,
     logout,
-    updateUser,
+    updateUser: storeUpdateUser,
   };
 }
 
