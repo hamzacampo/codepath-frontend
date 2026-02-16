@@ -33,6 +33,7 @@ import type {
   ActivityByDateResponse,
   GrowthTimelineResponse,
   SkillLevel,
+  ChatbotResponse,
 } from "../types";
 
 class APIService {
@@ -615,6 +616,16 @@ class APIService {
     emailContent: string;
   }): Promise<BackendSuccessResponse> {
     const response = await apiClient.post("/contact/send/mentees", data);
+    return response.data;
+  }
+
+  /**
+   * Chatbot - POST /chatbot/ask (Mentee only)
+   * Body: { question }
+   * Returns: ChatbotResponse (answer | response | message from FastAPI)
+   */
+  async askChatbot(question: string): Promise<ChatbotResponse> {
+    const response = await apiClient.post("/chatbot/ask", { question });
     return response.data;
   }
 }

@@ -1,4 +1,5 @@
 import DashboardSidebar from "@/components/layout/DashboardSidebar";
+import { FloatingChatbot } from "@/components/ui/FloatingChatbot";
 import { StarNetworkBackground } from "@/components/ui/StarNetworkBackground";
 
 export default function DashboardLayout({
@@ -13,6 +14,7 @@ export default function DashboardLayout({
       <main className="flex-1 w-full max-w-[100vw] overflow-x-hidden pt-16 px-4 lg:pt-0 lg:px-0 relative z-10">
         {children}
       </main>
+      <FloatingChatbot />
     </div>
   );
 }

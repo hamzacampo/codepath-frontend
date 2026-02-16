@@ -228,6 +228,13 @@ export interface ChatMessage {
   hintLevel?: number; // 1-3 for hints
 }
 
+/** Backend forwards FastAPI response; may have answer, response, or message. */
+export interface ChatbotResponse {
+  answer?: string;
+  response?: string;
+  message?: string;
+}
+
 // API Response Types - Backend returns direct data or { message, ...data }
 export interface BackendErrorResponse {
   message: string;
