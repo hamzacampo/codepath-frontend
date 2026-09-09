@@ -75,7 +75,7 @@ class MockAPI {
           email,
           codeforcesHandle,
           leetcodeHandle,
-        },
+        } as User,
         tokens: {
           accessToken: "mock-access-token",
           refreshToken: "mock-refresh-token",

@@ -1,34 +1,46 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Icon } from "@iconify/react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { apiService } from "@/lib/api-service";
-import type { CodeforcesProblem, FavouriteProblem } from "@/types";
+import type { CodeforcesProblem } from "@/types";
+import { CodePathProblemList } from "@/components/problemset/CodePathProblemList";
+import { ProblemSourceBadge } from "@/components/problemset/ProblemSourceBadge";
+import { ProblemsetFiltersDialog } from "@/components/problemset/ProblemsetFiltersDialog";
+import { ProblemsetActiveFilters } from "@/components/problemset/ProblemsetActiveFilters";
+import { ProblemsetToolbar } from "@/components/problemset/ProblemsetToolbar";
+import { FavouriteToggleButton } from "@/components/problemset/FavouriteToggleButton";
+import { useProblemFavourites } from "@/hooks/use-problem-favourites";
+import {
+  buildProblemListParams,
+  hasActiveProblemFilters,
+  type ProblemListSort,
+} from "@/lib/problem-filters";
 
 const PAGE_SIZE = 20;
 
-export default function ProblemsetPage() {
+type ProblemsetTab = "codepath" | "codeforces";
+
+function ProblemsetPageContent() {
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<ProblemsetTab>("codepath");
+
+  useEffect(() => {
+    const requested = searchParams.get("tab");
+    if (requested === "codeforces" || requested === "codepath") {
+      setTab(requested);
+    }
+  }, [searchParams]);
   const [page, setPage] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
   const [minRating, setMinRating] = useState<number | null>(null);
+  const [maxRating, setMaxRating] = useState<number | null>(null);
   const [tagFilter, setTagFilter] = useState<string>("all");
-  const [draftMinRating, setDraftMinRating] = useState<number | null>(null);
-  const [draftTagFilter, setDraftTagFilter] = useState<string>("all");
-
-  useEffect(() => {
-    if (filterOpen) {
-      setDraftMinRating(minRating);
-      setDraftTagFilter(tagFilter);
-    }
-  }, [filterOpen, minRating, tagFilter]);
+  const [sort, setSort] = useState<ProblemListSort>("rating_asc");
+  const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
 
   const [data, setData] = useState<{
     items: CodeforcesProblem[];
@@ -39,19 +51,23 @@ export default function ProblemsetPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [favourites, setFavourites] = useState<FavouriteProblem[]>([]);
+  const { isFavourited, isToggling, toggleFavourite } = useProblemFavourites();
 
   useEffect(() => {
+    if (tab !== "codeforces") return;
     let cancelled = false;
     setLoading(true);
     setError(null);
     apiService
-      .getProblems({
-        page,
-        limit: PAGE_SIZE,
-        minRating: minRating ?? undefined,
-        tag: tagFilter === "all" ? undefined : tagFilter,
-      })
+      .getProblems(
+        buildProblemListParams(page, PAGE_SIZE, {
+          minRating,
+          maxRating,
+          tag: tagFilter,
+          search,
+          sort,
+        }),
+      )
       .then((res) => {
         if (!cancelled) {
           setData({
@@ -75,82 +91,30 @@ export default function ProblemsetPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, minRating, tagFilter]);
-
-  useEffect(() => {
-    apiService
-      .getFavouriteProblems()
-      .then(setFavourites)
-      .catch(() => setFavourites([]));
-  }, []);
+  }, [tab, page, minRating, maxRating, tagFilter, search, sort]);
 
   const getExternalProblemId = (p: CodeforcesProblem) =>
     p.contestId != null && p.index != null ? `${p.contestId}${p.index}` : null;
-  const getFavouriteForProblem = (p: CodeforcesProblem): FavouriteProblem | undefined =>
-    favourites.find(
-      (f) =>
-        f.platform === "Codeforces" && f.externalProblemId === getExternalProblemId(p)
-    );
-  const isFavourited = (p: CodeforcesProblem) => !!getFavouriteForProblem(p);
 
-  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const hasActiveFilters = hasActiveProblemFilters({
+    minRating,
+    maxRating,
+    tag: tagFilter,
+    search,
+    sort,
+  });
 
-  const toggleFavourite = useCallback(
-    async (problem: CodeforcesProblem) => {
-      const externalId = getExternalProblemId(problem);
-      if (externalId == null) return;
-      const existing = getFavouriteForProblem(problem);
-      if (togglingId === externalId) return;
-      setTogglingId(externalId);
-      const toRemove = existing;
-      try {
-        if (toRemove) {
-          setFavourites((prev) => prev.filter((f) => f.id !== toRemove.id));
-          if (!toRemove.id.startsWith("temp-")) {
-            await apiService.removeProblemFromFavourite(toRemove.id);
-          }
-        } else {
-          const tempFav: FavouriteProblem = {
-            id: `temp-${externalId}`,
-            externalProblemId: externalId,
-            platform: "Codeforces",
-            createdAt: new Date().toISOString(),
-          };
-          setFavourites((prev) => [...prev, tempFav]);
-          await apiService.addProblemToFavourite({
-            externalProblemId: externalId,
-            platform: "Codeforces",
-          });
-          const list = await apiService.getFavouriteProblems();
-          setFavourites(list);
-        }
-      } catch {
-        if (toRemove) {
-          setFavourites((prev) => [...prev, toRemove]);
-        } else {
-          setFavourites((prev) =>
-            prev.filter(
-              (f) =>
-                !(
-                  f.platform === "Codeforces" &&
-                  f.externalProblemId === externalId &&
-                  f.id.startsWith("temp-")
-                )
-            )
-          );
-        }
-      } finally {
-        setTogglingId(null);
-      }
-    },
-    [favourites, togglingId]
-  );
-
+  const clearFilters = () => {
+    setMinRating(null);
+    setMaxRating(null);
+    setTagFilter("all");
+    setSort("rating_asc");
+    setSearch("");
+    setSearchDraft("");
+    setPage(1);
+  };
   const problemsToShow = data?.items ?? [];
-  const uniqueTags = useMemo(() => {
-    return (data?.availableTags ?? []).slice();
-  }, [data?.availableTags]);
-
+  const uniqueTags = data?.availableTags ?? [];
   const pageCount = data?.totalPages ?? 1;
   const currentPage = Math.min(page, pageCount);
   const startNumber = data ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
@@ -193,74 +157,71 @@ export default function ProblemsetPage() {
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
       <div className="flex flex-col gap-4 sm:gap-6 max-w-6xl mx-auto">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <span className="text-sm text-[#666666]">
-              {loading
-                ? "Loading..."
-                : `Showing ${PAGE_SIZE} problems per page`}
-            </span>
-            {(minRating != null || (tagFilter !== "all" && tagFilter)) && (
-              <span className="text-xs text-primary font-medium">
-                Filter active
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setDraftMinRating(minRating);
-              setDraftTagFilter(tagFilter);
-              setFilterOpen(true);
-            }}
-            className="relative inline-flex items-center justify-center px-3 py-2 text-sm text-[#666666] transition-colors hover:text-foreground"
-            aria-label={
-              minRating != null || (tagFilter !== "all" && tagFilter)
-                ? "Filters active – change filters"
-                : "Filter problems"
-            }
-          >
-            <Icon
-              icon="mage:filter-fill"
-              className={`w-8 h-8 ${minRating != null || (tagFilter !== "all" && tagFilter) ? "text-primary" : "text-[#666666]"}`}
-              aria-hidden
-            />
-            {(minRating != null || (tagFilter !== "all" && tagFilter)) && (
-              <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 rounded-full bg-primary ring-2 ring-background" aria-hidden />
-            )}
-          </button>
-        </div>
-
-        {(minRating != null || (tagFilter !== "all" && tagFilter)) && !loading && (
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
-            <Icon icon="mdi:filter-check" className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-            <span className="text-sm font-medium text-foreground">Active filters:</span>
-            <div className="flex flex-wrap items-center gap-2">
-              {minRating != null && (
-                <span className="inline-flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                  <Icon icon="mdi:thunder-outline" className="h-3.5 w-3.5" />
-                  {minRating}+
-                </span>
-              )}
-              {tagFilter !== "all" && tagFilter && (
-                <span className="inline-flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                  <Icon icon="mdi:tag-outline" className="h-3.5 w-3.5" />
-                  {tagFilter}
-                </span>
-              )}
-            </div>
+        <div className="flex flex-col gap-3">
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Problemset</h1>
+          <div className="flex gap-1 rounded-lg border border-border bg-card p-1 w-fit">
             <button
               type="button"
-              className="ml-auto rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              onClick={() => {
-                setMinRating(null);
-                setTagFilter("all");
-                setPage(1);
-              }}
+              onClick={() => setTab("codepath")}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                tab === "codepath"
+                  ? "bg-[#7c3aed] text-white"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              }`}
             >
-              Clear filters
+              CodePath
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("codeforces")}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                tab === "codeforces"
+                  ? "bg-[#7c3aed] text-white"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              }`}
+            >
+              Codeforces (External)
             </button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            {tab === "codepath"
+              ? "First-party problems judged on the CodePath platform."
+              : "External problems from Codeforces — solve and sync on Codeforces."}
+          </p>
+        </div>
+
+        {tab === "codepath" ? (
+          <CodePathProblemList />
+        ) : (
+          <>
+        <ProblemsetToolbar
+          searchDraft={searchDraft}
+          onSearchDraftChange={setSearchDraft}
+          onSearchSubmit={() => {
+            setSearch(searchDraft);
+            setPage(1);
+          }}
+          searchPlaceholder="Search title, tags, contest..."
+          hasActiveFilters={hasActiveFilters}
+          onOpenFilters={() => setFilterOpen(true)}
+          resultLabel={
+            loading
+              ? "Loading..."
+              : total > 0
+                ? `Showing ${startNumber}–${endNumber} of ${total} problems`
+                : "No problems found"
+          }
+        />
+
+        {!loading && (
+          <ProblemsetActiveFilters
+            minRating={minRating}
+            maxRating={maxRating}
+            tagFilter={tagFilter}
+            search={search}
+            sort={sort}
+            onClear={clearFilters}
+          />
         )}
 
         {error && (
@@ -289,10 +250,11 @@ export default function ProblemsetPage() {
                     className="rounded-xl bg-linear-to-r from-75% to-100% from-secondary to-black hover:from-secondary/70 hover:to-black border border-border/80 px-4 sm:px-5 py-3.5 sm:py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between transition-colors"
                   >
                     <div className="flex flex-col gap-2 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-sm sm:text-base font-semibold text-foreground truncate">
                           {problem.title}
                         </h3>
+                        <ProblemSourceBadge source="codeforces" />
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         {problem.tags.map((tag) => (
@@ -332,9 +294,7 @@ export default function ProblemsetPage() {
 
                       {canSolve(problem) ? (
                         <Link
-                          href={`/problem/${problem.contestId}/${problem.index}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          href={`/dashboard/problems/cf/${problem.contestId}/${problem.index}`}
                           className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-xs sm:text-sm font-semibold text-primary-foreground hover:shadow-[0_0_16px_rgba(87,43,174,0.9)] transition-shadow"
                         >
                           Solve
@@ -351,27 +311,21 @@ export default function ProblemsetPage() {
                         </span>
                       )}
 
-                      <button
-                        type="button"
-                        onClick={() => toggleFavourite(problem)}
-                        disabled={
-                          getExternalProblemId(problem) == null ||
-                          togglingId === getExternalProblemId(problem)
+                      <FavouriteToggleButton
+                        isFavourited={
+                          getExternalProblemId(problem) != null &&
+                          isFavourited("Codeforces", getExternalProblemId(problem)!)
                         }
-                        className={`inline-flex items-center justify-center w-9 h-9 min-w-9 min-h-9 shrink-0 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                          isFavourited(problem)
-                            ? "text-primary hover:text-primary/90"
-                            : "text-muted-foreground hover:text-accent"
-                        }`}
-                        aria-label={isFavourited(problem) ? "Remove from favourites" : "Add to favourites"}
-                        aria-busy={togglingId === getExternalProblemId(problem)}
-                      >
-                        <Icon
-                          icon={isFavourited(problem) ? "mdi:heart" : "mdi:heart-outline"}
-                          className="w-9 h-9 shrink-0"
-                          aria-hidden
-                        />
-                      </button>
+                        disabled={getExternalProblemId(problem) == null}
+                        loading={
+                          getExternalProblemId(problem) != null &&
+                          isToggling("Codeforces", getExternalProblemId(problem)!)
+                        }
+                        onToggle={() => {
+                          const externalId = getExternalProblemId(problem);
+                          if (externalId) toggleFavourite("Codeforces", externalId);
+                        }}
+                      />
                     </div>
                   </article>
                 ))
@@ -437,125 +391,42 @@ export default function ProblemsetPage() {
           </>
         )}
 
-        <Dialog open={filterOpen} onOpenChange={setFilterOpen}>
-          <DialogContent className="p-0 gap-0 max-w-lg overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
-            <DialogHeader className="px-6 pt-6 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                  <Icon icon="mage:filter-fill" className="h-5 w-5 text-primary" aria-hidden />
-                </div>
-                <div className="space-y-1">
-                  <DialogTitle className="text-lg font-semibold tracking-tight">
-                    Filter problems
-                  </DialogTitle>
-                  <DialogDescription className="text-sm text-muted-foreground">
-                    Filters apply to the full problemset. Results are paginated.
-                  </DialogDescription>
-                </div>
-              </div>
-              {(minRating != null || (tagFilter !== "all" && tagFilter)) && (
-                <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                  <Icon icon="mdi:filter-check" className="h-3.5 w-3.5" />
-                  {[minRating != null && `${minRating}+`, tagFilter !== "all" && tagFilter]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-              )}
-            </DialogHeader>
-
-            <div className="space-y-6 px-6 pb-6">
-              <div className="space-y-3 rounded-xl border border-border/80 bg-muted/30 px-4 py-4">
-                <div className="flex items-center gap-2">
-                  <Icon icon="mdi:thunder-outline" className="h-4 w-4 text-primary" aria-hidden />
-                  <span className="text-sm font-medium text-foreground">Minimum rating</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {[null, 1200, 1400, 1700, 2000, 2300].map((value) => {
-                    const isActive = draftMinRating === value;
-                    const label = value === null ? "Any" : `${value}+`;
-                    return (
-                      <button
-                        key={label}
-                        type="button"
-                        onClick={() => setDraftMinRating(value)}
-                        className={`rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors ${
-                          isActive
-                            ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                            : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-3 rounded-xl border border-border/80 bg-muted/30 px-4 py-4">
-                <div className="flex items-center gap-2">
-                  <Icon icon="mdi:tag-outline" className="h-4 w-4 text-primary" aria-hidden />
-                  <span className="text-sm font-medium text-foreground">Topic tag</span>
-                </div>
-                <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto py-0.5 pr-1">
-                  <button
-                    type="button"
-                    onClick={() => setDraftTagFilter("all")}
-                    className={`rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors ${
-                      draftTagFilter === "all"
-                        ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                        : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                    }`}
-                  >
-                    All topics
-                  </button>
-                  {uniqueTags.map((tag) => {
-                    const isActive = draftTagFilter === tag;
-                    return (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => setDraftTagFilter(tag)}
-                        className={`rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors ${
-                          isActive
-                            ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                            : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                        }`}
-                      >
-                        {tag}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 border-t border-border/80 pt-4">
-                <button
-                  type="button"
-                  className="rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  onClick={() => {
-                    setDraftMinRating(null);
-                    setDraftTagFilter("all");
-                  }}
-                >
-                  Reset all
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-                  onClick={() => {
-                    setMinRating(draftMinRating);
-                    setTagFilter(draftTagFilter);
-                    setPage(1);
-                    setFilterOpen(false);
-                  }}
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <ProblemsetFiltersDialog
+          open={filterOpen}
+          onOpenChange={setFilterOpen}
+          title="Filter Codeforces Problems"
+          minRating={minRating}
+          maxRating={maxRating}
+          tagFilter={tagFilter}
+          sort={sort}
+          availableTags={uniqueTags}
+          onApply={({ minRating: nextMin, maxRating: nextMax, tagFilter: nextTag, sort: nextSort }) => {
+            setMinRating(nextMin);
+            setMaxRating(nextMax);
+            setTagFilter(nextTag);
+            setSort(nextSort);
+            setPage(1);
+          }}
+        />
+          </>
+        )}
       </div>
     </div>
+  );
+}
+
+export default function ProblemsetPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+          <div className="max-w-6xl mx-auto rounded-xl border border-border bg-secondary/50 px-4 py-8 text-center text-muted-foreground">
+            Loading problemset...
+          </div>
+        </div>
+      }
+    >
+      <ProblemsetPageContent />
+    </Suspense>
   );
 }

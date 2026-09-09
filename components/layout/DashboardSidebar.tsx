@@ -4,46 +4,64 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@iconify/react";
+import { useIsAdmin } from "@/store/auth-store";
+import { useDashboardSidebar } from "@/components/layout/DashboardSidebarContext";
 
 const navItems = [
   { href: "/dashboard", label: "CodePrint", icon: "fluent-mdl2:analytics-view" },
   { href: "/dashboard/problemset", label: "Problemset", icon: "mdi:set" },
+  { href: "/dashboard/contests", label: "Contests", icon: "mdi:trophy-outline" },
   { href: "/dashboard/favourites", label: "Favorite Problems", icon: "mdi:heart" },
   { href: "/dashboard/roadmap", label: "My Roadmap", icon: "eos-icons:machine-learning-outlined" },
+  { href: "/dashboard/coaches", label: "Coaching Sessions", icon: "mdi:account-tie-outline" },
+  { href: "/dashboard/reference", label: "Reference", icon: "mdi:book-open-outline" },
+  { href: "/dashboard/peers", label: "Nearby Peers", icon: "mdi:account-group-outline" },
   { href: "/dashboard/profile", label: "Profile", icon: "iconamoon:profile" },
 ] as const;
+
+const adminNavItem = {
+  href: "/admin",
+  label: "Admin",
+  icon: "mdi:shield-account-outline",
+} as const;
 
 export default function DashboardSidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { collapsed, toggleCollapsed } = useDashboardSidebar();
+  const isAdmin = useIsAdmin();
 
   const closeMobile = () => setMobileOpen(false);
 
-  // Lock body scroll when sidebar is open on mobile
+  const allNavItems = isAdmin ? [...navItems, adminNavItem] : navItems;
+
   useEffect(() => {
-    if (mobileOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
+    if (!mobileOpen) return;
+    document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = "hidden";
     };
   }, [mobileOpen]);
 
+  useEffect(() => {
+    closeMobile();
+  }, [pathname]);
+
+  const desktopWidthClass = collapsed ? "lg:w-[4.5rem]" : "lg:w-56";
+
   return (
     <>
-      {/* Mobile menu button - middle left so navbar stays visible */}
+      {/* Mobile menu button */}
       <button
         type="button"
         onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed left-4 top-1/2 -translate-y-1/2 z-60 flex items-center justify-center w-11 h-11 rounded-xl bg-gray-900 text-gray-300 hover:bg-gray-800 hover:text-white border border-gray-700 active:scale-95 transition-all shadow-lg"
+        className="lg:hidden fixed left-4 top-[calc(var(--app-header-height)+0.75rem)] z-40 flex items-center justify-center w-11 h-11 rounded-xl bg-card text-muted-foreground hover:bg-secondary hover:text-foreground border border-border active:scale-95 transition-all shadow-lg"
         aria-label="Open dashboard menu"
       >
         <Icon icon="mdi:menu" className="w-6 h-6" aria-hidden />
       </button>
 
-      {/* Backdrop when sidebar is open on mobile */}
+      {/* Mobile backdrop */}
       <div
         role="button"
         tabIndex={0}
@@ -51,61 +69,95 @@ export default function DashboardSidebar() {
         onKeyDown={(e) => e.key === "Escape" && closeMobile()}
         aria-hidden
         className={`
-          lg:hidden fixed inset-0 bg-black/70 z-55 transition-opacity duration-200
+          lg:hidden fixed inset-0 bg-black/70 z-30 transition-opacity duration-200
           ${mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
         `}
       />
 
-      {/* Sidebar panel - drawer on mobile, static on desktop */}
+      {/* Desktop spacer — reserves horizontal space while aside is fixed */}
+      <div
+        className={`hidden lg:block shrink-0 transition-[width] duration-200 ease-out ${desktopWidthClass}`}
+        aria-hidden
+      />
+
+      {/* Sidebar */}
       <aside
         className={`
-          w-[min(280px,85vw)] lg:w-56 min-h-screen flex flex-col py-6 bg-black shrink-0
-          fixed lg:static inset-y-0 left-0 z-60
-          transform transition-transform duration-200 ease-out
-          lg:translate-x-0 lg:transform-none
-          shadow-xl lg:shadow-none
-          ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
+          w-[min(280px,85vw)] ${desktopWidthClass}
+          flex flex-col bg-black border-r border-border/40
+          fixed inset-y-0 left-0 z-40
+          lg:top-(--app-header-height) lg:bottom-0 lg:h-[calc(100dvh-var(--app-header-height))]
+          transform transition-[transform,width] duration-200 ease-out
+          lg:translate-x-0
+          shadow-xl lg:shadow-none lg:overflow-visible
+          ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
       >
-        {/* Close button - visible only on mobile when sidebar is open */}
-        <div className="lg:hidden flex items-center justify-between px-4 pb-3 border-b border-gray-800">
-          <span className="text-sm font-semibold text-gray-300">Menu</span>
+        <div className="relative flex h-full min-h-0 flex-col">
+        <div className="lg:hidden flex items-center justify-between px-4 py-3 border-b border-border/60 shrink-0">
+          <span className="text-sm font-semibold text-muted-foreground">Menu</span>
           <button
             type="button"
             onClick={closeMobile}
-            className="flex items-center justify-center w-10 h-10 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 active:scale-95 transition-all"
+            className="flex items-center justify-center w-10 h-10 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary active:scale-95 transition-all"
             aria-label="Close menu"
           >
             <Icon icon="mdi:close" className="w-6 h-6" aria-hidden />
           </button>
         </div>
-        <nav className="flex flex-col gap-1 px-3 pt-4 lg:pt-6">
-          {navItems.map(({ href, label, icon }) => {
-            const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+
+        <nav className="flex flex-1 flex-col gap-1 px-2 py-4 lg:py-6 overflow-y-auto overscroll-contain min-h-0">
+          {allNavItems.map(({ href, label, icon }) => {
+            const isActive =
+              pathname === href ||
+              (href !== "/dashboard" && pathname.startsWith(href));
             return (
               <Link
                 key={href}
                 href={href}
                 onClick={closeMobile}
+                title={collapsed ? label : undefined}
                 aria-current={isActive ? "page" : undefined}
+                aria-label={collapsed ? label : undefined}
                 className={`
-                  flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
+                  flex items-center rounded-lg transition-colors
+                  ${collapsed ? "lg:justify-center lg:px-0 lg:py-3" : "gap-3 px-3 py-3"}
                   ${isActive
-                    ? "bg-[#7c3aed] text-white"
-                    : "text-gray-400 hover:text-gray-300 hover:bg-gray-900/50"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/80"
                   }
                 `}
               >
                 <Icon
                   icon={icon}
-                  className={`w-6 h-6 shrink-0 ${isActive ? "text-white" : "text-gray-400"}`}
+                  className={`w-6 h-6 shrink-0 ${isActive ? "text-primary-foreground" : ""}`}
                   aria-hidden
                 />
-                <span className="font-medium text-sm">{label}</span>
+                <span
+                  className={`font-medium text-sm truncate ${collapsed ? "lg:hidden" : ""}`}
+                >
+                  {label}
+                </span>
               </Link>
             );
           })}
         </nav>
+
+        {/* Desktop collapse — pops out from the right edge */}
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          className="hidden lg:flex absolute top-1/2 -right-3.5 z-50 h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-lg hover:bg-secondary hover:text-foreground hover:border-primary/40 active:scale-95 transition-all"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <Icon
+            icon={collapsed ? "mdi:chevron-right" : "mdi:chevron-left"}
+            className="w-4 h-4 shrink-0"
+            aria-hidden
+          />
+        </button>
+        </div>
       </aside>
     </>
   );

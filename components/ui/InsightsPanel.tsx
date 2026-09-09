@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { Icon } from "@iconify/react";
 
-/** Fallback data when no insights from API. */
 const FALLBACK_INSIGHTS = [
   "Solve 3 DP problems to strengthen your weak area.",
   "Watch tutorial: Graph Algorithms Simplified.",
@@ -12,19 +11,48 @@ const FALLBACK_INSIGHTS = [
 ];
 
 interface InsightsPanelProps {
-  /** From API GET /statistics/mentee (insightsPanel). Single string; newlines become separate bullets. */
-  content?: string | null;
+  insights?: string[];
+  loading?: boolean;
 }
 
-export function InsightsPanel({ content }: InsightsPanelProps) {
-  const raw = (content ?? "").trim();
-  const useFallback =
-    raw === "" ||
-    /AI insights are not available|connect your coding platform account/i.test(raw);
+function InsightsPanelSkeleton() {
+  return (
+    <div
+      className="w-full rounded-lg bg-linear-to-r from-accent to-[#3F305C] p-4 sm:p-8 box-border relative overflow-visible"
+      aria-busy="true"
+      aria-live="polite"
+    >
+      <div className="flex flex-col gap-4 relative z-10">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-full bg-accent-foreground/20 animate-pulse" />
+          <div className="h-6 w-36 rounded-md bg-accent-foreground/20 animate-pulse" />
+        </div>
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="flex items-start gap-2">
+              <div className="mt-1.5 w-1.5 h-1.5 rounded-sm bg-accent-foreground/20 animate-pulse" />
+              <div
+                className="h-4 rounded-md bg-accent-foreground/20 animate-pulse"
+                style={{ width: `${70 + (index % 3) * 8}%` }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  const insights = useFallback
-    ? FALLBACK_INSIGHTS
-    : raw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+export function InsightsPanel({
+  insights,
+  loading = false,
+}: InsightsPanelProps) {
+  if (loading) {
+    return <InsightsPanelSkeleton />;
+  }
+
+  const hasInsights = insights != null && insights.length > 0;
+  const displayInsights = hasInsights ? insights : FALLBACK_INSIGHTS;
 
   return (
     <div className="w-full rounded-lg bg-linear-to-r from-accent to-[#3F305C] p-4 sm:p-8 box-border relative overflow-visible">
@@ -38,10 +66,17 @@ export function InsightsPanel({ content }: InsightsPanelProps) {
             />
             <h2 className="text-accent-foreground font-bold text-lg">Insights Panel</h2>
           </div>
+
           <ul className="list-none space-y-2">
-            {insights.map((text, index) => (
-              <li key={index} className="flex items-start gap-2 text-accent-foreground text-sm sm:text-base">
-                <span className="mt-1.5 w-1.5 h-1.5 rounded-sm bg-accent-foreground shrink-0" aria-hidden />
+            {displayInsights.map((text, index) => (
+              <li
+                key={`${index}-${text.slice(0, 12)}`}
+                className="flex items-start gap-2 text-accent-foreground text-sm sm:text-base"
+              >
+                <span
+                  className="mt-1.5 w-1.5 h-1.5 rounded-sm bg-accent-foreground shrink-0"
+                  aria-hidden
+                />
                 <span>{text}</span>
               </li>
             ))}

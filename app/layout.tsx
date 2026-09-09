@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Cairo, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
+import AppShell from "@/components/layout/AppShell";
 import AuthInitializer from "@/components/AuthInitializer";
 
 const cairo = Cairo({
@@ -35,11 +34,7 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className={`${cairo.variable} ${geistSans.variable} ${geistMono.variable} antialiased`}>
         <AuthInitializer />
-        <div className="flex min-h-screen flex-col">
-          <Header />
-          <main className="flex-1">{children}</main>
-          <Footer />
-        </div>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

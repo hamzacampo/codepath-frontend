@@ -56,7 +56,7 @@ export default function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full min-h-14 sm:min-h-16 lg:min-h-18 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 border-b border-border/50 lg:border-b-0">
+    <header className="sticky top-0 z-50 w-full min-h-14 sm:min-h-16 lg:min-h-18 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 border-b border-border/50 lg:border-b-0 shrink-0">
       <div className="flex items-center justify-between h-14 sm:h-16 lg:h-auto lg:py-5 px-4 sm:px-6 md:px-8 lg:px-14 w-full max-w-[100vw]">
         <div className="flex items-center justify-between w-full gap-3">
           {/* Logo - smaller on mobile to leave room for menu */}

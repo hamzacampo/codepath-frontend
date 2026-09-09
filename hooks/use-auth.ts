@@ -28,12 +28,13 @@ export function useAuth() {
     initialize();
   }, [initialize]);
 
-  // Wrapper for login with router redirect to dashboard
+  // Wrapper for login with role-based redirect
   const login = useCallback(
     async (email: string, password: string) => {
       const result = await storeLogin(email, password);
       if (result.success) {
-        router.push("/dashboard");
+        const role = useAuthStore.getState().user?.role;
+        router.push(role === "Admin" ? "/admin" : "/dashboard");
       }
       return result;
     },

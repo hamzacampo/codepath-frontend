@@ -20,14 +20,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login, isAuthenticated, loading: authLoading } = useAuth();
+  const { login, isAuthenticated, loading: authLoading, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.replace("/dashboard");
+      router.replace(user?.role === "Admin" ? "/admin" : "/dashboard");
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading, router, user?.role]);
 
   if (authLoading || isAuthenticated) {
     return (
@@ -45,9 +45,7 @@ export default function LoginPage() {
     const result = await login(email, password);
     setLoading(false);
 
-    if (result.success) {
-      router.push("/dashboard");
-    } else {
+    if (!result.success) {
       setError(result.error || "Login failed");
     }
   };

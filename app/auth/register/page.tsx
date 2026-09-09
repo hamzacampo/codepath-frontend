@@ -19,7 +19,7 @@ import { Icon } from "@iconify/react";
 import Image from "next/image";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { apiService } from "@/lib/api-service";
-import { Label } from "@/components/ui/Label";
+import { PlacementQuiz } from "@/components/quiz/PlacementQuiz";
 
 type Step =
   | "personal-info"
@@ -40,10 +40,6 @@ interface FormData {
   assessmentMethod: "" | "codeforces" | "quiz" | "manual";
   codeforcesHandle: string;
   skillLevel: string;
-  quizAnswers: string[];
-  quizSelectedOptions: Record<number, number>; // question_id -> selected_option index
-  quizId?: number;
-  quizQuestions?: Array<{ id: number; question?: string; questionTitle?: string; options?: string[] }>;
 }
 
 export default function RegisterPage() {
@@ -59,10 +55,6 @@ export default function RegisterPage() {
     assessmentMethod: "",
     codeforcesHandle: "",
     skillLevel: "",
-    quizAnswers: ["", "", ""],
-    quizSelectedOptions: {},
-    quizId: undefined,
-    quizQuestions: undefined,
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -222,38 +214,6 @@ export default function RegisterPage() {
     }
   };
 
-  const handleQuizNext = async () => {
-    const questions = formData.quizQuestions || [];
-    if (!questions.length) {
-      setError("Loading questions...");
-      return;
-    }
-    const allAnswered = questions.every((q) => formData.quizSelectedOptions[q.id] !== undefined);
-    if (!allAnswered) {
-      setError("Please answer all questions");
-      return;
-    }
-    const answers = questions.map((q) => ({
-      question_id: q.id,
-      selected_option: formData.quizSelectedOptions[q.id] as number,
-    }));
-    setLoading(true);
-    setError("");
-    try {
-      const result = await apiService.submitQuiz(
-        answers.map((a) => ({ question_id: a.question_id, selected_option: a.selected_option })),
-        formData.quizId
-      );
-      setAssessedLevel(result.MenteeLevel ?? null);
-      finalizeRegistration();
-      setCurrentStep("congratulations");
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.message || "Failed to submit quiz");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="w-full flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-12 min-h-[calc(100vh-200px)] px-4 py-8 max-w-7xl mx-auto">
       {/* Step indicator */}
@@ -322,19 +282,16 @@ export default function RegisterPage() {
         )}
 
         {displayStep === "quiz" && (
-          <QuizStep
-            formData={formData}
-            updateFormData={updateFormData}
-            onNext={handleQuizNext}
+          <PlacementQuiz
             onBack={() => setCurrentStep("assessment-method")}
-            onCompleteDbQuiz={(level) => {
-              setAssessedLevel(level);
+            backLabel="Choose another method"
+            onComplete={(result) => {
+              setAssessedLevel(result.level);
               finalizeRegistration();
               setCurrentStep("congratulations");
             }}
-            onDbSubmitError={(message) => setError(message)}
             error={error}
-            loading={loading}
+            onError={setError}
           />
         )}
 
@@ -716,277 +673,6 @@ function CodeforcesStep({
             </>
           )}
         </Button>
-      </div>
-    </div>
-  );
-}
-
-type QuizQuestionShape = {
-  id: number;
-  question?: string;
-  questionTitle?: string;
-  options?: string[];
-};
-
-function normalizeQuizResponse(data: any): { quizId?: number; questions: QuizQuestionShape[] } {
-  const rawQuestions = data?.questions ?? data?.items ?? data?.question_list ?? [];
-  const questions: QuizQuestionShape[] = Array.isArray(rawQuestions)
-    ? rawQuestions.map((q: any, idx: number) => ({
-        id: q.id ?? q.question_id ?? idx + 1,
-        questionTitle: q.questionTitle ?? q.question ?? q.title ?? "",
-        question: q.question ?? q.questionTitle ?? q.title ?? "",
-        options: Array.isArray(q.options) ? q.options : Array.isArray(q.choices) ? q.choices : [],
-      }))
-    : [];
-  return { quizId: data?.quizId ?? data?.quiz_id, questions };
-}
-
-function QuizStep({
-  formData,
-  updateFormData,
-  onNext,
-  onBack,
-  onCompleteDbQuiz,
-  onDbSubmitError,
-  error,
-  loading,
-}: {
-  formData: FormData;
-  updateFormData: (field: keyof FormData, value: any) => void;
-  onNext: () => void;
-  onBack: () => void;
-  /** Called when DB quiz is submitted with (level from server); parent should set level and go to congratulations */
-  onCompleteDbQuiz?: (level: string) => void;
-  onDbSubmitError?: (message: string) => void;
-  error: string;
-  loading: boolean;
-}) {
-  const [fetching, setFetching] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [dbQuizMode, setDbQuizMode] = useState(false);
-  const [submittingDb, setSubmittingDb] = useState(false);
-
-  const loadQuiz = () => {
-    setFetching(true);
-    setFetchError(null);
-    setDbQuizMode(false);
-
-    const applyDbQuestions = (response: unknown) => {
-      const list = Array.isArray(response)
-        ? response
-        : Array.isArray((response as any)?.questions)
-          ? (response as any).questions
-          : Array.isArray((response as any)?.data)
-            ? (response as any).data
-            : [];
-      if (list.length === 0) return false;
-      const questions: QuizQuestionShape[] = list.map((q: any) => {
-        const title =
-          q.questionTitle ??
-          q.question_title ??
-          q.question ??
-          (typeof q.title === "string" ? q.title : "") ??
-          "";
-        return {
-          id: Number(q.id),
-          questionTitle: title,
-          question: title,
-          options: [],
-        };
-      });
-      updateFormData("quizId", undefined);
-      updateFormData("quizQuestions", questions);
-      updateFormData("quizAnswers", questions.map(() => ""));
-      setDbQuizMode(true);
-      setFetching(false);
-      return true;
-    };
-
-    const applyAiResponse = (aiData: any) => {
-      const { quizId, questions } = normalizeQuizResponse(aiData);
-      if (questions.length > 0) {
-        updateFormData("quizId", quizId);
-        updateFormData("quizQuestions", questions);
-        updateFormData("quizAnswers", questions.map(() => ""));
-        setDbQuizMode(false);
-        setFetching(false);
-        return;
-      }
-      setFetchError("No quiz questions available. Please choose Codeforces or manual level.");
-      setFetching(false);
-    };
-
-    // 1) Try DB quiz first — fetch all questions from QuizQuestion table
-    apiService
-      .getQuizAll()
-      .then((dbQuestions) => {
-        if (applyDbQuestions(dbQuestions)) return;
-        return apiService.getQuizStart(3).then(applyAiResponse);
-      })
-      .catch(() => {
-        return apiService.getQuizStart(3).then(applyAiResponse);
-      })
-      .catch((err) => {
-        setFetchError(
-          err?.response?.data?.message || err?.message || "Couldn't load quiz. Try again or choose Codeforces / manual level."
-        );
-        setFetching(false);
-      });
-  };
-
-  useEffect(() => {
-    loadQuiz();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const questions = formData.quizQuestions ?? [];
-  const setSelectedOption = (questionId: number, optionIndex: number) => {
-    updateFormData("quizSelectedOptions", { ...formData.quizSelectedOptions, [questionId]: optionIndex });
-  };
-
-  return (
-    <div className="bg-linear-to-b from-[#FFFFFF]/25 from-0% via-[#FFFFFF]/20 via-50% to-[#FFFFFF]/6 to-100% rounded-2xl p-6 md:p-8 w-full max-w-[560px] border border-black">
-      <h2 className="text-2xl font-bold text-foreground text-center mb-2">Take a placement quiz</h2>
-      <p className="text-muted-foreground text-center text-sm mb-8">
-        Answer the following questions below to help us analyze your skills.
-      </p>
-
-      {error && (
-        <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md border border-destructive/20 mb-4">
-          {error}
-        </div>
-      )}
-
-      {fetchError && (
-        <div className="p-3 text-sm text-amber-600 bg-amber-500/10 rounded-md border border-amber-500/20 mb-4">
-          {fetchError}
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-2 w-full"
-            onClick={loadQuiz}
-          >
-            Retry
-          </Button>
-        </div>
-      )}
-
-      {fetching ? (
-        <p className="text-muted-foreground text-center py-6">Loading questions...</p>
-      ) : (
-        <div className="space-y-6">
-          {questions.map((q, idx) => {
-            const title =
-              (q as any).questionTitle ??
-              (q as any).question_title ??
-              q.question ??
-              `Question ${idx + 1}`;
-            const options = q.options ?? [];
-            const selected = formData.quizSelectedOptions[q.id];
-            return (
-              <div key={q.id}>
-                <Label className="text-foreground font-semibold mb-2 block">
-                  {title ? `Question #${idx + 1}: ${title}` : `Question #${idx + 1}`}
-                </Label>
-                {options.length ? (
-                  <RadioGroup
-                    value={selected !== undefined ? String(selected) : ""}
-                    onValueChange={(v) => setSelectedOption(q.id, parseInt(v, 10))}
-                    className="space-y-2"
-                  >
-                    {options.map((opt, i) => (
-                      <label
-                        key={i}
-                        className="flex items-center gap-2 p-2 rounded-lg border border-input cursor-pointer hover:bg-muted/50"
-                      >
-                        <RadioGroupItem value={String(i)} id={`q-${q.id}-${i}`} />
-                        <span>{opt}</span>
-                      </label>
-                    ))}
-                  </RadioGroup>
-                ) : (
-                  <Textarea
-                    placeholder="Answer here"
-                    value={(formData.quizAnswers ?? [])[idx] ?? ""}
-                    onChange={(e) => {
-                      const answers = formData.quizAnswers ?? [];
-                      const next = [...answers];
-                      while (next.length <= idx) next.push("");
-                      next[idx] = e.target.value;
-                      updateFormData("quizAnswers", next);
-                    }}
-                    className="min-h-[80px]"
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="flex flex-nowrap items-center justify-between gap-2 mt-8">
-        {!fetching && questions.length > 0 && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onBack}
-            className="shrink-0 text-xs sm:text-sm border-primary-foreground/50 text-primary-foreground hover:bg-primary-foreground/10 whitespace-nowrap"
-          >
-            Choose another method
-          </Button>
-        )}
-        <div className="flex shrink-0">
-          {!fetching && questions.length > 0 && dbQuizMode && onCompleteDbQuiz && (
-            <Button
-              type="button"
-              disabled={submittingDb}
-              onClick={async () => {
-                const questions = formData.quizQuestions ?? [];
-                const answers = formData.quizAnswers ?? [];
-                const payload = questions.map((q, idx) => ({
-                  questionId: q.id,
-                  userAnswer: answers[idx] ?? "",
-                }));
-                setSubmittingDb(true);
-                try {
-                  const result = await apiService.submitQuizDB(payload);
-                  onCompleteDbQuiz(result.level);
-                } catch (err: any) {
-                  setSubmittingDb(false);
-                  onDbSubmitError?.(err?.response?.data?.message || err?.message || "Failed to submit quiz");
-                }
-              }}
-              className="text-xs sm:text-sm bg-primary hover:bg-primary/90 text-primary-foreground whitespace-nowrap disabled:opacity-50"
-            >
-              {submittingDb ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                <>Submit answers & continue <ArrowRight className="ml-2 h-4 w-4" /></>
-              )}
-            </Button>
-          )}
-          {!fetching && questions.length > 0 && !dbQuizMode && (
-            <Button
-              onClick={onNext}
-              disabled={loading}
-              className="text-xs sm:text-sm bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50 whitespace-nowrap"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  Next <ArrowRight className="ml-2 h-4 w-4" />
-                </>
-              )}
-            </Button>
-          )}
-        </div>
       </div>
     </div>
   );

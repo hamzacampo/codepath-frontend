@@ -10,8 +10,33 @@ interface Message {
   content: string;
 }
 
-function getReplyText(data: { answer?: string; response?: string; message?: string }): string {
-  return data.answer ?? data.response ?? data.message ?? "Sorry, I couldn't get a response.";
+function getReplyText(data: {
+  reply?: string;
+  answer?: string;
+  response?: string;
+  message?: string;
+}): string {
+  return (
+    data.reply ??
+    data.answer ??
+    data.response ??
+    data.message ??
+    "Sorry, I couldn't get a response."
+  );
+}
+
+/** Avoid dumping HTML / huge provider errors into the chat bubble. */
+function sanitizeErrorMessage(raw: unknown): string {
+  if (typeof raw !== "string" || !raw.trim()) {
+    return "Chatbot is unavailable. Please try again later.";
+  }
+  if (raw.includes("<!DOCTYPE") || raw.includes("<html") || raw.length > 280) {
+    if (raw.includes("403") || /Forbidden/i.test(raw)) {
+      return "AI service rejected the request (Gemini API key or model access). Check FastAPI GEMINI_API_KEY.";
+    }
+    return "Chatbot is unavailable. Please try again later.";
+  }
+  return raw;
 }
 
 export function FloatingChatbot() {
@@ -50,14 +75,15 @@ export function FloatingChatbot() {
     } catch (err: unknown) {
       const message =
         err && typeof err === "object" && "response" in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          ? (err as { response?: { data?: { message?: string } } }).response?.data
+              ?.message
           : null;
       setMessages((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: message ?? "Chatbot is unavailable. Please try again later.",
+          content: sanitizeErrorMessage(message),
         },
       ]);
     } finally {
@@ -70,10 +96,10 @@ export function FloatingChatbot() {
       {/* Panel */}
       {open && (
         <div
-          className="fixed bottom-20 right-6 z-50 w-[min(360px,calc(100vw-3rem))] rounded-xl border border-border bg-card shadow-lg flex flex-col overflow-hidden"
+          className="fixed bottom-20 right-6 z-50 w-[min(360px,calc(100vw-3rem))] max-w-[calc(100vw-3rem)] rounded-xl border border-border bg-card shadow-lg flex flex-col overflow-hidden"
           style={{ height: "420px" }}
         >
-          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border bg-secondary">
+          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border bg-secondary shrink-0">
             <span className="font-semibold text-foreground">Chat</span>
             <button
               type="button"
@@ -86,24 +112,25 @@ export function FloatingChatbot() {
           </div>
           <div
             ref={listRef}
-            className="flex-1 overflow-y-auto p-4 space-y-3"
+            className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 space-y-3"
           >
             {messages.length === 0 && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground break-words">
                 Ask a question about your learning or coding practice.
               </p>
             )}
             {messages.map((m) => (
               <div
                 key={m.id}
-                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex min-w-0 ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                  className={`max-w-[85%] min-w-0 rounded-lg px-3 py-2 text-sm break-words whitespace-pre-wrap overflow-wrap-anywhere ${
                     m.role === "user"
                       ? "bg-accent text-accent-foreground"
                       : "bg-muted text-foreground"
                   }`}
+                  style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
                 >
                   {m.content}
                 </div>
@@ -117,7 +144,7 @@ export function FloatingChatbot() {
               </div>
             )}
           </div>
-          <div className="p-3 border-t border-border flex gap-2">
+          <div className="p-3 border-t border-border flex gap-2 shrink-0 min-w-0">
             <input
               type="text"
               value={input}

@@ -33,19 +33,19 @@ npm install
 cp .env.example .env.local
 ```
 
-3. Update `.env.local` with your backend API URL:
+3. Update `.env.local` with your backend API URL (no `/api` prefix):
 ```
-NEXT_PUBLIC_API_BASE_URL=http://localhost:3001/api
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
 ```
 
 ### Development
 
-Run the development server:
+Run the development server (port 3001; Node backend uses 3000):
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3001](http://localhost:3001) in your browser.
 
 ### Build
 

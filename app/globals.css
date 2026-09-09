@@ -95,6 +95,23 @@
     color: var(--color-foreground);
     overflow-x: hidden;
   }
+
+  :root {
+    --app-header-height: 3.5rem;
+  }
+
+  @media (min-width: 640px) {
+    :root {
+      --app-header-height: 4rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    :root {
+      /* lg header: 5rem logo + 2.5rem vertical padding */
+      --app-header-height: 7.5rem;
+    }
+  }
 }
 
 /* Growth Timeline chart: ensure horizontal (X) grid lines are visible */

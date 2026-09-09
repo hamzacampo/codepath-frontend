@@ -51,7 +51,6 @@ export default function CodeEditor({
           acceptSuggestionOnCommitCharacter: true,
           parameterHints: { enabled: true },
           hover: { enabled: true },
-          semanticHighlighting: { enabled: true },
           bracketPairColorization: { enabled: true },
           folding: true,
           renderLineHighlight: "all",

@@ -1,30 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Icon } from "@iconify/react";
 import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
+import { NotificationToast } from "@/components/ui/NotificationToast";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { CodeforcesAccountCard } from "@/components/profile/CodeforcesAccountCard";
+import { CodeforcesConnectDialog } from "@/components/profile/CodeforcesConnectDialog";
 import { apiService } from "@/lib/api-service";
-import type { MenteeProfileResponse } from "@/types";
-import type { ExternalAccount } from "@/types";
+import { getApiErrorMessage } from "@/lib/errors";
+import type {
+  CodeforcesIntegrationStatus,
+  MenteeProfileResponse,
+  SkillLevelOption,
+  SkillLevelPreference,
+  SkillSyncStatus,
+} from "@/types";
+import { LevelPreferenceDialog } from "@/components/profile/LevelPreferenceDialog";
 
 const inputClass =
   "w-full max-w-full min-w-0 p-2 rounded-lg border border-accent text-accent bg-transparent placeholder:text-accent focus:outline-none focus:ring-2 focus:ring-accent box-border";
-
-function normalizeExternalAccounts(
-  data: ExternalAccount | ExternalAccount[] | null
-): ExternalAccount[] {
-  if (data == null) return [];
-  return Array.isArray(data) ? data : [data];
-}
 
 export default function ProfilePage() {
   const [data, setData] = useState<MenteeProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Profile form state (fullName, phone, country, bio)
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("");
@@ -32,14 +36,12 @@ export default function ProfilePage() {
   const [profileUpdating, setProfileUpdating] = useState(false);
   const [profileMessage, setProfileMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Password form state
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordUpdating, setPasswordUpdating] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Statistics from same API as CodePrint (GET /statistics/mentee) so profile matches dashboard
   const [menteeStats, setMenteeStats] = useState<{
     codePathRating: number;
     codePathLevel: string;
@@ -47,51 +49,199 @@ export default function ProfilePage() {
     accuracy: number;
   } | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    apiService
-      .getMenteeProfile()
-      .then((res) => {
-        if (!cancelled) {
-          setData(res);
-          setError(null);
-          setFullName(res.mentee.fullName ?? "");
-          setPhone(res.mentee.phone ?? "");
-          setCountry(res.mentee.country ?? "");
-          setBio(res.mentee.bio ?? "");
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          const message =
-            err && typeof err === "object" && "response" in err
-              ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-              : null;
-          setError(message || "Failed to load profile");
-          setData(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+  const [cfIntegration, setCfIntegration] = useState<CodeforcesIntegrationStatus | null>(null);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectConfirmOpen, setDisconnectConfirmOpen] = useState(false);
+  const [levelOptionsOpen, setLevelOptionsOpen] = useState(false);
+  const [levelOptions, setLevelOptions] = useState<SkillLevelOption[]>([]);
+  const [levelCurrentPreference, setLevelCurrentPreference] =
+    useState<SkillLevelPreference | null>(null);
+  const [levelChoiceMandatory, setLevelChoiceMandatory] = useState(false);
+  const [levelOptionsLoading, setLevelOptionsLoading] = useState(false);
+  const [levelPreferenceSaving, setLevelPreferenceSaving] = useState(false);
+  const [levelOptionsError, setLevelOptionsError] = useState<string | null>(null);
+  const [skillSyncStatus, setSkillSyncStatus] = useState<SkillSyncStatus>("idle");
+  const [skillSyncMessage, setSkillSyncMessage] = useState<string | null>(null);
+  const [skillSyncPending, setSkillSyncPending] = useState(false);
+  const syncPollActive = useRef(false);
+  const pendingChoiceFetchRef = useRef(false);
+  const [notification, setNotification] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  const loadCodeforcesIntegration = useCallback(async () => {
+    try {
+      const status = await apiService.getCodeforcesIntegration();
+      setCfIntegration(status);
+    } catch {
+      setCfIntegration({ linked: false, handle: null, isVerified: false, lastSynced: null, codePathLevel: null });
+    }
   }, []);
 
+  const loadProfile = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await loadCodeforcesIntegration();
+      const res = await apiService.getMenteeProfile();
+      setData(res);
+      setFullName(res.mentee.fullName ?? "");
+      setPhone(res.mentee.phone ?? "");
+      setCountry(res.mentee.country ?? "");
+      setBio(res.mentee.bio ?? "");
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Failed to load profile"));
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadCodeforcesIntegration]);
+
   useEffect(() => {
-    apiService
-      .getMenteeStatistics()
-      .then((res) => {
-        setMenteeStats({
-          codePathRating: res.codePathRating ?? 0,
-          codePathLevel: res.codePathLevel ?? "—",
-          problemsSolved: res.problemsSolved ?? 0,
-          accuracy: res.accuracy ?? 0,
-        });
-      })
-      .catch(() => setMenteeStats(null));
+    loadProfile();
+  }, [loadProfile]);
+
+  const refreshMenteeStats = useCallback(async () => {
+    const stats = await apiService.getMenteeStatistics();
+    setMenteeStats({
+      codePathRating: stats.codePathRating ?? 0,
+      codePathLevel: stats.codePathLevel ?? "—",
+      problemsSolved: stats.problemsSolved ?? 0,
+      accuracy: stats.accuracy ?? 0,
+    });
   }, []);
+
+  const loadProfileQuiet = useCallback(async () => {
+    try {
+      await loadCodeforcesIntegration();
+      const res = await apiService.getMenteeProfile();
+      setData(res);
+    } catch {
+      // keep existing profile data during background refresh
+    }
+  }, [loadCodeforcesIntegration]);
+
+  useEffect(() => {
+    refreshMenteeStats().catch(() => setMenteeStats(null));
+  }, [refreshMenteeStats]);
+
+  useEffect(() => {
+    if (cfIntegration?.linked) {
+      void refreshMenteeStats();
+    }
+  }, [cfIntegration?.linked, skillSyncStatus, data?.skillProfile?.sources.codeforces.problemsSolved, refreshMenteeStats]);
+
+  const pollSkillSync = useCallback(async () => {
+    if (syncPollActive.current) return;
+    syncPollActive.current = true;
+    setSkillSyncPending(true);
+    setSkillSyncStatus("syncing");
+    setSkillSyncMessage(null);
+
+    try {
+      while (true) {
+        const sync = await apiService.getSkillSyncStatus();
+        setSkillSyncStatus(sync.status);
+
+        if (sync.status === "complete") {
+          await loadProfileQuiet();
+          await refreshMenteeStats();
+          if (sync.error) {
+            setSkillSyncMessage(sync.error);
+          } else {
+            setSkillSyncMessage(null);
+            setNotification({
+              type: "success",
+              message: "Skill level sync completed.",
+            });
+          }
+          break;
+        }
+
+        if (sync.status === "failed") {
+          setSkillSyncMessage(
+            sync.error ?? "Skill sync failed. Try reconnecting Codeforces.",
+          );
+          break;
+        }
+
+        if (sync.status !== "syncing") {
+          break;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+    } finally {
+      setSkillSyncPending(false);
+      syncPollActive.current = false;
+    }
+  }, [loadProfileQuiet, refreshMenteeStats]);
+
+  useEffect(() => {
+    const status = data?.skillProfile?.syncStatus;
+    if (!status) return;
+
+    setSkillSyncStatus(status);
+    if (status === "failed" || (status === "complete" && data.skillProfile?.syncError)) {
+      setSkillSyncMessage(data.skillProfile?.syncError ?? null);
+    }
+
+    if (status === "syncing") {
+      void pollSkillSync();
+    }
+  }, [data?.skillProfile?.syncStatus, data?.skillProfile?.syncError, pollSkillSync]);
+
+  const openLevelChoiceDialog = useCallback(
+    (
+      opts: SkillLevelOption[],
+      mandatory = false,
+      currentPreference?: SkillLevelPreference | null,
+    ) => {
+      setLevelOptions(opts);
+      setLevelCurrentPreference(currentPreference ?? null);
+      setLevelChoiceMandatory(mandatory);
+      setLevelOptionsError(null);
+      setLevelOptionsOpen(true);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const status = data?.skillProfile?.syncStatus;
+    if (status !== "pending_choice") {
+      pendingChoiceFetchRef.current = false;
+      return;
+    }
+    if (levelOptionsOpen || pendingChoiceFetchRef.current) return;
+
+    pendingChoiceFetchRef.current = true;
+    setLevelOptionsLoading(true);
+    apiService
+      .getSkillLevelOptions()
+      .then((res) => {
+        if (res.options.length <= 1) {
+          pendingChoiceFetchRef.current = false;
+          void loadProfileQuiet();
+          if (res.autoResolved) {
+            void pollSkillSync();
+          }
+          return;
+        }
+        openLevelChoiceDialog(res.options, true, res.currentPreference);
+      })
+      .catch((err) => {
+        pendingChoiceFetchRef.current = false;
+        setLevelOptionsError(
+          getApiErrorMessage(err, "Failed to load level options."),
+        );
+        setLevelOptionsOpen(true);
+      })
+      .finally(() => setLevelOptionsLoading(false));
+  }, [data?.skillProfile?.syncStatus, levelOptionsOpen, openLevelChoiceDialog, loadProfileQuiet, pollSkillSync]);
 
   const handleUpdateProfile = async () => {
     setProfileMessage(null);
@@ -104,12 +254,8 @@ export default function ProfilePage() {
         bio: bio.trim() || undefined,
       });
       setProfileMessage({ type: "success", text: "Profile updated successfully." });
-    } catch (err: unknown) {
-      const message =
-        err && typeof err === "object" && "response" in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-          : null;
-      setProfileMessage({ type: "error", text: message || "Failed to update profile." });
+    } catch (err) {
+      setProfileMessage({ type: "error", text: getApiErrorMessage(err, "Failed to update profile.") });
     } finally {
       setProfileUpdating(false);
     }
@@ -136,14 +282,118 @@ export default function ProfilePage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (err: unknown) {
-      const message =
-        err && typeof err === "object" && "response" in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-          : null;
-      setPasswordMessage({ type: "error", text: message || "Failed to update password." });
+    } catch (err) {
+      setPasswordMessage({ type: "error", text: getApiErrorMessage(err, "Failed to update password.") });
     } finally {
       setPasswordUpdating(false);
+    }
+  };
+
+  const handleConnectCodeforces = async (handle: string) => {
+    setConnectLoading(true);
+    setConnectError(null);
+    try {
+      const result = await apiService.integrateCodeforces(handle);
+      setConnectOpen(false);
+      await loadProfileQuiet();
+      void refreshMenteeStats();
+
+      setNotification({
+        type: "success",
+        message:
+          result.requiresLevelChoice
+            ? result.message ||
+              "Codeforces connected. Choose how CodePath should calculate your level."
+            : result.message || "Codeforces account connected successfully.",
+      });
+    } catch (err) {
+      const message = getApiErrorMessage(err, "Failed to connect Codeforces account.");
+      setConnectError(message);
+      setNotification({ type: "error", message });
+    } finally {
+      setConnectLoading(false);
+    }
+  };
+
+  const handleDisconnectCodeforces = async () => {
+    setDisconnecting(true);
+    try {
+      const result = await apiService.disconnectCodeforces();
+      setDisconnectConfirmOpen(false);
+      setNotification({
+        type: "success",
+        message: result.message || "Codeforces account disconnected successfully.",
+      });
+      await loadProfile();
+      void pollSkillSync();
+    } catch (err) {
+      setNotification({
+        type: "error",
+        message: getApiErrorMessage(err, "Failed to disconnect Codeforces account."),
+      });
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
+  const openLevelPreferenceDialog = async () => {
+    if (!cfIntegration?.linked) {
+      return;
+    }
+
+    if (skillSyncPending || skillSyncStatus === "syncing") {
+      setNotification({
+        type: "error",
+        message: "Please wait — your skill level is still syncing from Codeforces.",
+      });
+      return;
+    }
+
+    setLevelOptionsOpen(true);
+    setLevelOptionsLoading(true);
+    setLevelOptionsError(null);
+    setLevelOptions([]);
+    setLevelCurrentPreference(data?.skillProfile?.levelPreference ?? null);
+    setLevelChoiceMandatory(false);
+    try {
+      const res = await apiService.getSkillLevelOptions();
+      if (res.options.length <= 1) {
+        setLevelOptionsOpen(false);
+        return;
+      }
+      openLevelChoiceDialog(res.options, false, res.currentPreference);
+    } catch (err) {
+      setLevelOptionsError(
+        getApiErrorMessage(err, "Failed to load level options."),
+      );
+    } finally {
+      setLevelOptionsLoading(false);
+    }
+  };
+
+  const handleApplyLevelPreference = async (preference: SkillLevelPreference) => {
+    setLevelPreferenceSaving(true);
+    try {
+      const result = await apiService.setSkillLevelPreference(preference, "rules");
+      setLevelOptionsOpen(false);
+      setLevelChoiceMandatory(false);
+      await loadProfileQuiet();
+      setNotification({
+        type: "success",
+        message: "Updating your level…",
+      });
+      if (result.skillSyncPending) {
+        void pollSkillSync();
+      } else {
+        await refreshMenteeStats();
+      }
+    } catch (err) {
+      setNotification({
+        type: "error",
+        message: getApiErrorMessage(err, "Failed to update level preference."),
+      });
+    } finally {
+      setLevelPreferenceSaving(false);
     }
   };
 
@@ -167,12 +417,102 @@ export default function ProfilePage() {
     return null;
   }
 
-  const { mentee, externalAccountIntegration, statistics } = data;
-  const accounts = normalizeExternalAccounts(externalAccountIntegration);
+  const { mentee, statistics, skillProfile } = data;
+  const isSkillSyncing = skillSyncPending || skillSyncStatus === "syncing";
   const quizResult = statistics?.quizResult ?? "—";
+  const cfConnected = skillProfile?.sources.codeforces.connected ?? cfIntegration?.linked ?? false;
+  const cfProblemsSolved = skillProfile?.sources.codeforces.problemsSolved ?? 0;
+  const codepathProblemsSolved = skillProfile?.sources.codepath.solvedCount ?? 0;
+  const liveCfCount =
+    menteeStats?.problemsSolved ?? statistics?.problemsSolved ?? cfProblemsSolved;
+  const cfCountLooksStale =
+    cfConnected &&
+    codepathProblemsSolved > 0 &&
+    liveCfCount === codepathProblemsSolved;
+  const cfCountPending =
+    cfConnected &&
+    (cfCountLooksStale ||
+      (liveCfCount === 0 &&
+        (isSkillSyncing || skillSyncStatus === "syncing" || skillSyncStatus === "pending_choice")));
+  const displayProblemsSolved = cfConnected
+    ? cfCountPending
+      ? null
+      : liveCfCount
+    : codepathProblemsSolved;
+  const levelLabel = skillProfile?.tier ?? statistics?.level ?? "—";
+  const ratingLabel =
+    skillProfile?.rating ?? statistics?.rating ?? menteeStats?.codePathRating ?? "—";
+  const confidenceLabel = skillProfile?.confidence ?? statistics?.confidence;
+  const sourceLabel = skillProfile?.primarySource ?? statistics?.primarySource;
+
+  const codeforcesAccount =
+    cfIntegration?.linked && cfIntegration.handle
+      ? {
+          id: 0,
+          platform: "Codeforces",
+          handle: cfIntegration.handle,
+          lastSynced: cfIntegration.lastSynced,
+          isVerified: cfIntegration.isVerified,
+          createdAt: "",
+          updatedAt: "",
+        }
+      : null;
 
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+      {notification && (
+        <NotificationToast
+          type={notification.type}
+          message={notification.message}
+          onDismiss={() => setNotification(null)}
+        />
+      )}
+
+      <CodeforcesConnectDialog
+        open={connectOpen}
+        onOpenChange={(open) => {
+          setConnectOpen(open);
+          if (!open) setConnectError(null);
+        }}
+        onConnect={handleConnectCodeforces}
+        loading={connectLoading}
+        error={connectError}
+      />
+
+      <ConfirmDialog
+        open={disconnectConfirmOpen}
+        onOpenChange={setDisconnectConfirmOpen}
+        title="Disconnect Codeforces?"
+        description="Your CodePrint analytics will no longer sync from Codeforces until you connect again. You can choose how your level is calculated afterward."
+        confirmLabel="Disconnect"
+        cancelLabel="Keep connected"
+        variant="destructive"
+        action="disconnect"
+        loading={disconnecting}
+        onConfirm={handleDisconnectCodeforces}
+      />
+
+      <LevelPreferenceDialog
+        open={levelOptionsOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLevelChoiceMandatory(false);
+            setLevelOptionsError(null);
+            setLevelCurrentPreference(null);
+          }
+          setLevelOptionsOpen(open);
+        }}
+        options={levelOptions}
+        currentPreference={
+          levelCurrentPreference ?? data?.skillProfile?.levelPreference ?? null
+        }
+        optionsLoading={levelOptionsLoading}
+        saving={levelPreferenceSaving}
+        errorMessage={levelOptionsError}
+        mandatory={levelChoiceMandatory}
+        onConfirm={handleApplyLevelPreference}
+      />
+
       <div className="flex flex-col lg:flex-row gap-6 lg:gap-12 items-stretch w-full max-w-md sm:max-w-lg lg:max-w-none mx-auto lg:mx-0">
         <div className="h-auto w-full lg:w-1/2 min-w-0 flex flex-col border border-accent rounded-lg p-6 sm:p-8 space-y-4 box-border">
           <h3 className="text-center text-accent text-2xl sm:text-3xl font-bold leading-loose">
@@ -244,7 +584,6 @@ export default function ProfilePage() {
             </Button>
           </div>
 
-          {/* Change password section */}
           <div className="border-t border-accent/50 pt-4 mt-4 space-y-4">
             <h4 className="text-accent text-lg font-semibold">Change password</h4>
             <input
@@ -291,47 +630,12 @@ export default function ProfilePage() {
             <h3 className="text-center text-accent text-2xl sm:text-3xl font-bold leading-loose">
               Connected Accounts
             </h3>
-            {accounts.length === 0 ? (
-              <p className="text-center text-muted-foreground text-sm py-4">
-                No connected accounts
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {accounts.map((account) => (
-                  <div
-                    key={account.id}
-                    className="w-full sm:w-5/6 mx-auto bg-linear-to-r from-accent to-[#3F305C] rounded-lg p-4 box-border"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <Icon
-                          icon="hugeicons:connect"
-                          className="text-accent-foreground size-6 shrink-0"
-                        />
-                        <h3 className="text-accent-foreground text-lg sm:text-xl font-bold capitalize">
-                          {account.platform}
-                        </h3>
-                        {account.handle && (
-                          <span className="text-accent-foreground/80 text-sm">
-                            @{account.handle}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="rounded-lg bg-green-500 px-3 py-1 text-sm font-bold text-white">
-                          Connected
-                        </span>
-                        {account.lastSynced && (
-                          <span className="rounded-lg bg-blue-500 px-3 py-1 text-sm font-bold text-white">
-                            Synced
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <CodeforcesAccountCard
+              account={codeforcesAccount}
+              onConnect={() => setConnectOpen(true)}
+              onDisconnect={() => setDisconnectConfirmOpen(true)}
+              disconnecting={disconnecting}
+            />
           </div>
           <div className="border border-accent rounded-lg box-border p-6 sm:p-8 space-y-4">
             <h3 className="text-center text-accent text-2xl sm:text-3xl font-bold leading-loose">
@@ -349,20 +653,90 @@ export default function ProfilePage() {
               </div>
               <div className="flex flex-col gap-2 w-full sm:w-1/2 min-w-0 items-center sm:items-stretch">
                 <span className="w-full rounded-lg bg-linear-to-r from-accent to-[#3F305C] px-4 py-2 text-accent-foreground text-sm font-bold">
-                  CodePath Rating: {menteeStats != null ? menteeStats.codePathRating : "—"}
+                  CodePath Level: {levelLabel}
+                  {confidenceLabel ? ` (${confidenceLabel} confidence)` : ""}
                 </span>
                 <span className="w-full rounded-lg bg-linear-to-r from-accent to-[#3F305C] px-4 py-2 text-accent-foreground text-sm font-bold">
-                  CodePath Level: {menteeStats != null ? menteeStats.codePathLevel : "—"}
+                  CodePath Rating: {ratingLabel}
                 </span>
                 <span className="w-full rounded-lg bg-linear-to-r from-accent to-[#3F305C] px-4 py-2 text-accent-foreground text-sm font-bold">
-                  Problems Solved: {menteeStats != null ? menteeStats.problemsSolved : "—"}
+                  {cfConnected ? "Codeforces Solved" : "CodePath Solved"}:{" "}
+                  {displayProblemsSolved ?? "Updating…"}
+                  {cfCountPending && (
+                    <span className="block text-[10px] font-normal opacity-80 mt-0.5">
+                      Syncing your full Codeforces history — count updates after sync
+                    </span>
+                  )}
                 </span>
+                {cfConnected && (
+                  <span className="w-full rounded-lg border border-accent/40 px-4 py-2 text-accent text-xs">
+                    CodePath platform solves: {codepathProblemsSolved}
+                    {skillProfile
+                      ? ` · Contests finished: ${skillProfile.sources.contest.finishedCount}`
+                      : ""}
+                    {skillProfile?.sources.codeforces.handle
+                      ? ` · CF handle: ${skillProfile.sources.codeforces.handle}`
+                      : ""}
+                  </span>
+                )}
                 <span className="w-full rounded-lg bg-linear-to-r from-accent to-[#3F305C] px-4 py-2 text-accent-foreground text-sm font-bold">
                   Accuracy: {menteeStats != null ? `${menteeStats.accuracy}%` : "—"}
                 </span>
+                {sourceLabel && (
+                  <span className="w-full rounded-lg bg-linear-to-r from-accent to-[#3F305C] px-4 py-2 text-accent-foreground text-sm font-bold capitalize">
+                    Level source: {sourceLabel.replace("_", " ")}
+                  </span>
+                )}
+                {skillProfile && !cfConnected && (
+                  <span className="w-full rounded-lg border border-accent/40 px-4 py-2 text-accent text-xs">
+                    Connect Codeforces on your profile to include your full competitive programming history
+                    ({codepathProblemsSolved} solves tracked on CodePath so far).
+                  </span>
+                )}
+                {skillProfile && cfConnected && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={openLevelPreferenceDialog}
+                      disabled={isSkillSyncing || levelOptionsLoading}
+                    >
+                      {isSkillSyncing
+                        ? "Syncing level — please wait..."
+                        : levelOptionsLoading
+                          ? "Loading options..."
+                          : "How is my level calculated?"}
+                    </Button>
+                    {isSkillSyncing && (
+                      <span className="w-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-100 text-xs flex items-center gap-2">
+                        <Icon icon="svg-spinners:ring-resize" className="w-4 h-4 shrink-0" />
+                        Syncing full stats and calculating your level… You can change settings when this finishes.
+                      </span>
+                    )}
+                    {!isSkillSyncing && skillSyncStatus === "failed" && skillSyncMessage && (
+                      <span className="w-full rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-xs">
+                        {skillSyncMessage}
+                      </span>
+                    )}
+                    {!isSkillSyncing &&
+                      skillSyncStatus === "complete" &&
+                      skillSyncMessage && (
+                        <span className="w-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-100 text-xs">
+                          {skillSyncMessage}
+                        </span>
+                      )}
+                  </>
+                )}
                 <span className="w-full rounded-lg bg-linear-to-r from-accent to-[#3F305C] px-4 py-2 text-accent-foreground text-sm font-bold">
                   Quiz Result: {quizResult}
                 </span>
+                <Link
+                  href="/dashboard/quiz"
+                  className="w-full inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+                >
+                  Retake placement quiz
+                </Link>
               </div>
             </div>
           </div>

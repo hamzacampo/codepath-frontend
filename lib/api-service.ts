@@ -10,6 +10,12 @@ import type {
   MenteeSafe,
   MenteeDetails,
   MenteeProfileResponse,
+  MenteeSkillProfile,
+  SkillLevelOption,
+  SkillLevelPreference,
+  AssessmentMethod,
+  AssessmentMethodOption,
+  SkillSyncStatus,
   Role,
   ProblemsResponse,
   CodeforcesProblem,
@@ -20,6 +26,7 @@ import type {
   QuizQuestionSafe,
   QuizQuestionList,
   QuizQuestionForMentee,
+  QuizOptionInput,
   ContactInfo,
   ContactInquirySafe,
   ContactInquiryDetails,
@@ -29,11 +36,54 @@ import type {
   MyRoadmapModulesWithProgress,
   UserAchievement,
   RoadmapWithModules,
+  AdminRoadmapListItem,
+  CreateRoadmapInput,
+  UpdateRoadmapInput,
+  CreateRoadmapModuleInput,
+  UpdateRoadmapModuleInput,
+  CreateRoadmapResourceInput,
+  UpdateRoadmapResourceInput,
+  CreateRoadmapProblemInput,
+  UpdateRoadmapProblemInput,
+  PathModuleWithDetails,
+  PathModuleResource,
+  PathModuleProblem,
   MenteeStatisticsResponse,
   ActivityByDateResponse,
   GrowthTimelineResponse,
+  InsightItem,
+  AdminInsight,
   SkillLevel,
   ChatbotResponse,
+  CodePathProblemsListResponse,
+  CodePathProblemDetail,
+  CodePathProblemListItem,
+  CreateCodePathProblemInput,
+  UpdateCodePathProblemInput,
+  CreateProblemTestCaseInput,
+  UpdateProblemTestCaseInput,
+  ProblemTestCase,
+  ProblemPublishStatus,
+  CodePathSubmitResponse,
+  CodePathSubmissionsListResponse,
+  CodePathSubmissionDetail,
+  SubmissionVerdict,
+  ContestSummary,
+  ContestDetail,
+  ContestScoreboardResponse,
+  ContestSubmissionRecord,
+  ContestSubmitResponse,
+  CreateContestInput,
+  CodeforcesIntegrationStatus,
+  CoachProfile,
+  BookingSummary,
+  BookingStatus,
+  CreateCoachInput,
+  SolutionSnippet,
+  ReferenceCurateResponse,
+  NearbyMentee,
+  GenerateRoadmapResponse,
+  Topic,
 } from "../types";
 
 class APIService {
@@ -156,6 +206,16 @@ class APIService {
   }
 
   /**
+   * Get computed skill profile - GET /users/mentees/skill-profile
+   */
+  async getMenteeSkillProfile(refresh = false): Promise<MenteeSkillProfile> {
+    const response = await apiClient.get("/users/mentees/skill-profile", {
+      params: refresh ? { refresh: "true" } : undefined,
+    });
+    return response.data;
+  }
+
+  /**
    * Update Mentee Profile - POST /users/mentees/profile/update
    * Body: { fullName?, phone?, country?, bio? }
    * Returns: { message }
@@ -227,13 +287,19 @@ class APIService {
     page?: number;
     limit?: number;
     minRating?: number | null;
+    maxRating?: number | null;
     tag?: string | null;
+    search?: string | null;
+    sort?: "rating_asc" | "rating_desc" | "title_asc";
   }): Promise<ProblemsResponse> {
     const query: Record<string, unknown> = {};
     if (params?.page != null) query.page = params.page;
     if (params?.limit != null) query.limit = params.limit;
     if (params?.minRating != null && params.minRating > 0) query.minRating = params.minRating;
+    if (params?.maxRating != null && params.maxRating > 0) query.maxRating = params.maxRating;
     if (params?.tag != null && params.tag !== "all") query.tag = params.tag;
+    if (params?.search?.trim()) query.search = params.search.trim();
+    if (params?.sort) query.sort = params.sort;
     const response = await apiClient.get("/problems", { params: query });
     return response.data;
   }
@@ -282,7 +348,7 @@ class APIService {
    */
   async addProblemToFavourite(data: {
     externalProblemId: string;
-    platform: "Codeforces" | "LeetCode";
+    platform: "Codeforces" | "LeetCode" | "CodePath";
   }): Promise<BackendSuccessResponse> {
     const response = await apiClient.post("/problems/favourites/add", data);
     return response.data;
@@ -360,6 +426,88 @@ class APIService {
     return response.data;
   }
 
+  // ============ Roadmap Admin CRUD ============
+  async listAdminRoadmaps(): Promise<AdminRoadmapListItem[]> {
+    const response = await apiClient.get("/roadmaps");
+    return response.data;
+  }
+
+  async createAdminRoadmap(
+    data: CreateRoadmapInput,
+  ): Promise<{ roadmap: AdminRoadmapListItem }> {
+    const response = await apiClient.post("/roadmaps/create", data);
+    return response.data;
+  }
+
+  async updateAdminRoadmap(
+    id: number,
+    data: UpdateRoadmapInput,
+  ): Promise<{ roadmap: AdminRoadmapListItem }> {
+    const response = await apiClient.put(`/roadmaps/update/${id}`, data);
+    return response.data;
+  }
+
+  async deleteAdminRoadmap(id: number): Promise<void> {
+    await apiClient.delete(`/roadmaps/delete/${id}`);
+  }
+
+  async createRoadmapModule(
+    data: CreateRoadmapModuleInput,
+  ): Promise<{ module: PathModuleWithDetails }> {
+    const response = await apiClient.post("/roadmaps/create/modules", data);
+    return response.data;
+  }
+
+  async updateRoadmapModule(
+    id: number,
+    data: UpdateRoadmapModuleInput,
+  ): Promise<{ module: PathModuleWithDetails }> {
+    const response = await apiClient.put(`/roadmaps/update/modules/${id}`, data);
+    return response.data;
+  }
+
+  async deleteRoadmapModule(id: number): Promise<void> {
+    await apiClient.delete(`/roadmaps/delete/modules/${id}`);
+  }
+
+  async createRoadmapResource(
+    data: CreateRoadmapResourceInput,
+  ): Promise<{ resource: PathModuleResource }> {
+    const response = await apiClient.post("/roadmaps/create/resources", data);
+    return response.data;
+  }
+
+  async updateRoadmapResource(
+    id: number,
+    data: UpdateRoadmapResourceInput,
+  ): Promise<{ resource: PathModuleResource }> {
+    const response = await apiClient.put(`/roadmaps/update/resources/${id}`, data);
+    return response.data;
+  }
+
+  async deleteRoadmapResource(id: number): Promise<void> {
+    await apiClient.delete(`/roadmaps/delete/resources/${id}`);
+  }
+
+  async createRoadmapProblem(
+    data: CreateRoadmapProblemInput,
+  ): Promise<{ problem: PathModuleProblem }> {
+    const response = await apiClient.post("/roadmaps/create/problems", data);
+    return response.data;
+  }
+
+  async updateRoadmapProblem(
+    id: number,
+    data: UpdateRoadmapProblemInput,
+  ): Promise<{ problem: PathModuleProblem }> {
+    const response = await apiClient.put(`/roadmaps/update/problems/${id}`, data);
+    return response.data;
+  }
+
+  async deleteRoadmapProblem(id: number): Promise<void> {
+    await apiClient.delete(`/roadmaps/delete/problems/${id}`);
+  }
+
   // ============ Statistics (Mentee) - CodePrint ============
   /**
    * Get mentee statistics (rating, level, problems solved, accuracy, CodePrint, insights) - GET /statistics/mentee
@@ -410,11 +558,63 @@ class APIService {
     message: string;
     handle?: string;
     codePathLevel?: string;
+    skillSyncPending?: boolean;
+    requiresLevelChoice?: boolean;
+    levelOptions?: SkillLevelOption[];
+    assessmentMethods?: AssessmentMethodOption[];
   }> {
     const response = await apiClient.post(
       "/external-accounts/codeforces/integrate",
       { handle }
     );
+    return response.data;
+  }
+
+  async getCodeforcesIntegration(): Promise<CodeforcesIntegrationStatus> {
+    const response = await apiClient.get("/external-accounts/codeforces/integration");
+    return response.data;
+  }
+
+  async disconnectCodeforces(): Promise<{
+    message: string;
+    codePathLevel?: string;
+    levelOptions?: SkillLevelOption[];
+    assessmentMethods?: AssessmentMethodOption[];
+    requiresLevelChoice?: boolean;
+  }> {
+    const response = await apiClient.delete("/external-accounts/codeforces/disconnect");
+    return response.data;
+  }
+
+  async getSkillLevelOptions(): Promise<{
+    options: SkillLevelOption[];
+    assessmentMethods: AssessmentMethodOption[];
+    currentPreference: SkillLevelPreference;
+    currentAssessmentMethod: AssessmentMethod;
+    profile?: MenteeSkillProfile;
+    autoResolved?: boolean;
+  }> {
+    const response = await apiClient.get("/users/mentees/skill-level-options");
+    return response.data;
+  }
+
+  async getSkillSyncStatus(): Promise<{
+    status: SkillSyncStatus;
+    error: string | null;
+    updatedAt: string | null;
+  }> {
+    const response = await apiClient.get("/users/mentees/skill-sync-status");
+    return response.data;
+  }
+
+  async setSkillLevelPreference(
+    preference: SkillLevelPreference,
+    assessmentMethod: AssessmentMethod = "rules",
+  ): Promise<{ message: string; profile: MenteeSkillProfile; skillSyncPending?: boolean }> {
+    const response = await apiClient.post("/users/mentees/skill-level-preference", {
+      preference,
+      assessmentMethod,
+    });
     return response.data;
   }
 
@@ -439,13 +639,13 @@ class APIService {
 
   /**
    * Create Quiz Question (Admin) - POST /quiz/questions/create
-   * Body: { questionTitle, answer, score }
+   * Body: { questionTitle, score, options }
    * Returns: { message }
    */
   async createQuizQuestion(data: {
     questionTitle: string;
-    answer: string;
     score: number;
+    options: QuizOptionInput[];
   }): Promise<BackendSuccessResponse> {
     const response = await apiClient.post("/quiz/questions/create", data);
     return response.data;
@@ -453,15 +653,15 @@ class APIService {
 
   /**
    * Update Quiz Question (Admin) - POST /quiz/questions/update/:id
-   * Body: { questionTitle?, answer?, score? }
+   * Body: { questionTitle?, score?, options? }
    * Returns: { message }
    */
   async updateQuizQuestion(
     id: number,
     data: {
       questionTitle?: string;
-      answer?: string;
       score?: number;
+      options?: QuizOptionInput[];
     }
   ): Promise<BackendSuccessResponse> {
     const response = await apiClient.post(`/quiz/questions/update/${id}`, data);
@@ -500,11 +700,11 @@ class APIService {
 
   /**
    * Submit DB quiz (Mentee) - POST /quiz/submit-db
-   * Body: { answers: [{ questionId, userAnswer }] }
+   * Body: { answers: [{ questionId, selectedOptionId }] }
    * Returns: { level, totalScore, maxScore }
    */
   async submitQuizDB(
-    answers: Array<{ questionId: number; userAnswer: string }>
+    answers: Array<{ questionId: number; selectedOptionId: number }>
   ): Promise<{ level: string; totalScore: number; maxScore: number }> {
     const response = await apiClient.post("/quiz/submit-db", { answers });
     return response.data;
@@ -537,13 +737,55 @@ class APIService {
   async submitQuiz(
     answers: Array<{ question_id: number; selected_option: number }>,
     quizId?: number
-  ): Promise<{ MenteeLevel: string; ResultAccuracy: number }> {
+  ): Promise<{ MenteeLevel: string; ResultAccuracy: number; AiInsight?: string | null }> {
     const body: {
       answers: Array<{ question_id: number; selected_option: number }>;
       quizId?: number;
     } = { answers };
     if (quizId != null) body.quizId = quizId;
     const response = await apiClient.post("/quiz/submit", body);
+    return response.data;
+  }
+
+  // ============ Insights Endpoints ============
+  async getActiveInsights(): Promise<InsightItem[]> {
+    const response = await apiClient.get("/insights");
+    return response.data;
+  }
+
+  async getAdminInsights(): Promise<AdminInsight[]> {
+    const response = await apiClient.get("/insights/manage");
+    return response.data;
+  }
+
+  async getAdminInsight(id: number): Promise<AdminInsight> {
+    const response = await apiClient.get(`/insights/manage/${id}`);
+    return response.data;
+  }
+
+  async createInsight(data: {
+    content: string;
+    isActive?: boolean;
+    sortOrder?: number;
+  }): Promise<AdminInsight> {
+    const response = await apiClient.post("/insights/manage", data);
+    return response.data;
+  }
+
+  async updateInsight(
+    id: number,
+    data: {
+      content?: string;
+      isActive?: boolean;
+      sortOrder?: number;
+    },
+  ): Promise<AdminInsight> {
+    const response = await apiClient.put(`/insights/manage/${id}`, data);
+    return response.data;
+  }
+
+  async deleteInsight(id: number): Promise<BackendSuccessResponse> {
+    const response = await apiClient.delete(`/insights/manage/${id}`);
     return response.data;
   }
 
@@ -622,10 +864,499 @@ class APIService {
   /**
    * Chatbot - POST /chatbot/ask (Mentee only)
    * Body: { question }
-   * Returns: ChatbotResponse (answer | response | message from FastAPI)
+   * Returns: { reply } from FastAPI via Node
    */
   async askChatbot(question: string): Promise<ChatbotResponse> {
     const response = await apiClient.post("/chatbot/ask", { question });
+    return response.data;
+  }
+
+  // ============ CodePath Problem Endpoints (Admin + Mentee) ============
+
+  /**
+   * List published CodePath problems - GET /codepath-problems
+   */
+  async listCodePathProblems(params?: {
+    page?: number;
+    limit?: number;
+    minRating?: number;
+    maxRating?: number;
+    tag?: string;
+    search?: string;
+    sort?: "rating_asc" | "rating_desc" | "title_asc";
+  }): Promise<CodePathProblemsListResponse> {
+    const response = await apiClient.get("/codepath-problems", { params });
+    return response.data;
+  }
+
+  /**
+   * List all CodePath problems (Admin) - GET /codepath-problems/admin/all
+   */
+  async listAllCodePathProblemsAdmin(params?: {
+    page?: number;
+    limit?: number;
+    status?: ProblemPublishStatus;
+    search?: string;
+  }): Promise<CodePathProblemsListResponse> {
+    const response = await apiClient.get("/codepath-problems/admin/all", { params });
+    return response.data;
+  }
+
+  /**
+   * Get CodePath problem by ID - GET /codepath-problems/:id
+   */
+  async getCodePathProblem(id: string): Promise<CodePathProblemDetail> {
+    const response = await apiClient.get(`/codepath-problems/${id}`);
+    return response.data;
+  }
+
+  /**
+   * Create CodePath problem (Admin) - POST /codepath-problems
+   */
+  async createCodePathProblem(
+    data: CreateCodePathProblemInput,
+  ): Promise<CodePathProblemDetail> {
+    const response = await apiClient.post("/codepath-problems", data);
+    return response.data;
+  }
+
+  /**
+   * Update CodePath problem (Admin) - PUT /codepath-problems/:id
+   */
+  async updateCodePathProblem(
+    id: string,
+    data: UpdateCodePathProblemInput,
+  ): Promise<CodePathProblemDetail> {
+    const response = await apiClient.put(`/codepath-problems/${id}`, data);
+    return response.data;
+  }
+
+  /**
+   * Delete CodePath problem (Admin) - DELETE /codepath-problems/:id
+   */
+  async deleteCodePathProblem(id: string): Promise<BackendSuccessResponse> {
+    const response = await apiClient.delete(`/codepath-problems/${id}`);
+    return response.data;
+  }
+
+  /**
+   * Publish CodePath problem (Admin) - POST /codepath-problems/:id/publish
+   */
+  async publishCodePathProblem(id: string): Promise<CodePathProblemDetail> {
+    const response = await apiClient.post(`/codepath-problems/${id}/publish`);
+    return response.data;
+  }
+
+  /**
+   * Unpublish CodePath problem (Admin) - POST /codepath-problems/:id/unpublish
+   */
+  async unpublishCodePathProblem(id: string): Promise<CodePathProblemDetail> {
+    const response = await apiClient.post(`/codepath-problems/${id}/unpublish`);
+    return response.data;
+  }
+
+  /**
+   * Create test case (Admin) - POST /codepath-problems/:id/test-cases
+   */
+  async createProblemTestCase(
+    problemId: string,
+    data: CreateProblemTestCaseInput,
+  ): Promise<ProblemTestCase> {
+    const response = await apiClient.post(
+      `/codepath-problems/${problemId}/test-cases`,
+      data,
+    );
+    return response.data;
+  }
+
+  /**
+   * Update test case (Admin) - PUT /codepath-problems/:id/test-cases/:caseId
+   */
+  async updateProblemTestCase(
+    problemId: string,
+    caseId: string,
+    data: UpdateProblemTestCaseInput,
+  ): Promise<ProblemTestCase> {
+    const response = await apiClient.put(
+      `/codepath-problems/${problemId}/test-cases/${caseId}`,
+      data,
+    );
+    return response.data;
+  }
+
+  /**
+   * Delete test case (Admin) - DELETE /codepath-problems/:id/test-cases/:caseId
+   */
+  async deleteProblemTestCase(
+    problemId: string,
+    caseId: string,
+  ): Promise<BackendSuccessResponse> {
+    const response = await apiClient.delete(
+      `/codepath-problems/${problemId}/test-cases/${caseId}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Submit solution (Mentee) - POST /codepath-problems/:id/submit
+   */
+  async submitCodePathProblem(
+    problemId: string,
+    data: {
+      code: string;
+      language: "cpp" | "java" | "python" | "javascript";
+    },
+  ): Promise<CodePathSubmitResponse> {
+    const response = await apiClient.post(
+      `/codepath-problems/${problemId}/submit`,
+      data,
+      { timeout: 120000 },
+    );
+    return response.data;
+  }
+
+  /**
+   * My submissions for a problem - GET /codepath-problems/:id/submissions/me
+   */
+  async getMyCodePathSubmissions(
+    problemId: string,
+  ): Promise<CodePathSubmissionsListResponse> {
+    const response = await apiClient.get(
+      `/codepath-problems/${problemId}/submissions/me`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Submission detail - GET /codepath-problems/submissions/:submissionId
+   */
+  async getCodePathSubmission(
+    submissionId: string,
+  ): Promise<CodePathSubmissionDetail> {
+    const response = await apiClient.get(
+      `/codepath-problems/submissions/${submissionId}`,
+    );
+    return response.data;
+  }
+
+  // ============ Contest Endpoints ============
+
+  async getContests(status?: string): Promise<ContestSummary[]> {
+    const response = await apiClient.get("/contests", {
+      params: status ? { status } : undefined,
+    });
+    return response.data;
+  }
+
+  async getMyContests(): Promise<ContestSummary[]> {
+    const response = await apiClient.get("/contests/my");
+    return response.data;
+  }
+
+  async getContest(id: string): Promise<ContestDetail> {
+    const response = await apiClient.get(`/contests/${id}`);
+    return response.data;
+  }
+
+  async createContest(data: CreateContestInput): Promise<{
+    contestId: string;
+  }> {
+    const response = await apiClient.post("/contests/create", data, {
+      timeout: 120000,
+    });
+    return response.data;
+  }
+
+  async updateContest(
+    id: string,
+    data: Partial<CreateContestInput>,
+  ): Promise<ContestDetail> {
+    const response = await apiClient.put(`/contests/${id}`, data);
+    return response.data;
+  }
+
+  async publishContest(id: string): Promise<{ status: string }> {
+    const response = await apiClient.post(`/contests/${id}/publish`);
+    return response.data;
+  }
+
+  async joinContest(id: string): Promise<{ participant: ContestDetail["participants"][0] }> {
+    const response = await apiClient.post(`/contests/${id}/join`);
+    return response.data;
+  }
+
+  async startContest(id: string): Promise<{ status: string; virtualStartTime: string }> {
+    const response = await apiClient.post(`/contests/${id}/start`);
+    return response.data;
+  }
+
+  async startVirtualContest(
+    id: string,
+  ): Promise<{ participant: ContestDetail["participants"][0] }> {
+    const response = await apiClient.post(`/contests/${id}/virtual/start`);
+    return response.data;
+  }
+
+  async submitContestSolution(
+    contestId: string,
+    data: {
+      contestProblemId: string;
+      code: string;
+      language: "cpp" | "java" | "python" | "javascript";
+    },
+  ): Promise<ContestSubmitResponse> {
+    const response = await apiClient.post(`/contests/${contestId}/submissions`, data, {
+      timeout: 120000,
+    });
+    return response.data;
+  }
+
+  async finishContest(id: string): Promise<BackendSuccessResponse> {
+    const response = await apiClient.post(`/contests/${id}/finish`);
+    return response.data;
+  }
+
+  async getContestScoreboard(
+    id: string,
+    final = false,
+  ): Promise<ContestScoreboardResponse> {
+    const response = await apiClient.get(`/contests/${id}/scoreboard`, {
+      params: { final },
+    });
+    return response.data;
+  }
+
+  async getMyContestSubmissions(
+    id: string,
+  ): Promise<{ submissions: ContestSubmissionRecord[] }> {
+    const response = await apiClient.get(`/contests/${id}/my-submissions`);
+    return response.data;
+  }
+
+  async completeContest(id: string): Promise<{ status: string }> {
+    const response = await apiClient.post(`/contests/${id}/complete`);
+    return response.data;
+  }
+
+  async cancelContest(id: string): Promise<{ status: string }> {
+    const response = await apiClient.post(`/contests/${id}/cancel`);
+    return response.data;
+  }
+
+  async deleteContest(id: string): Promise<BackendSuccessResponse> {
+    const response = await apiClient.delete(`/contests/${id}`);
+    return response.data;
+  }
+
+  // ============ Coach & Booking Endpoints ============
+
+  async getCoaches(params?: {
+    specialty?: string;
+    available?: boolean;
+  }): Promise<CoachProfile[]> {
+    const response = await apiClient.get("/coaches", { params });
+    return response.data;
+  }
+
+  async getCoach(id: string): Promise<CoachProfile> {
+    const response = await apiClient.get(`/coaches/${id}`);
+    return response.data;
+  }
+
+  async createCoachAccount(data: CreateCoachInput): Promise<{
+    message: string;
+    coach: CoachProfile;
+  }> {
+    const response = await apiClient.post("/coaches", data);
+    return response.data;
+  }
+
+  async updateCoachProfile(
+    id: string,
+    data: {
+      name?: string;
+      specialty?: string;
+      bio?: string;
+      hourlyRate?: number | null;
+      isAvailable?: boolean;
+      bookingLink?: string;
+    },
+  ): Promise<{ message: string; coach: CoachProfile }> {
+    const response = await apiClient.patch(`/coaches/${id}`, data);
+    return response.data;
+  }
+
+  async uploadCoachAvatar(
+    id: string,
+    file: File,
+  ): Promise<{ message: string; coach: CoachProfile }> {
+    const formData = new FormData();
+    formData.append("avatar", file);
+    const response = await apiClient.post(`/coaches/${id}/avatar`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data;
+  }
+
+  async deleteCoachAvatar(id: string): Promise<{ message: string; coach: CoachProfile }> {
+    const response = await apiClient.delete(`/coaches/${id}/avatar`);
+    return response.data;
+  }
+
+  async createBooking(
+    coachId: string,
+    data: { startTime: string; endTime: string; notes?: string },
+  ): Promise<{ message: string; booking: BookingSummary }> {
+    const response = await apiClient.post(`/coaches/${coachId}/bookings`, data);
+    return response.data;
+  }
+
+  async getMyBookings(): Promise<BookingSummary[]> {
+    const response = await apiClient.get("/coaches/bookings/me");
+    return response.data;
+  }
+
+  async updateBookingStatus(
+    bookingId: string,
+    data: { status: BookingStatus; meetingUrl?: string },
+  ): Promise<{ message: string; booking: BookingSummary }> {
+    const response = await apiClient.patch(`/coaches/bookings/${bookingId}`, data);
+    return response.data;
+  }
+
+  // ============ Reference Library Endpoints ============
+
+  async getMySnippets(params?: {
+    topicId?: number;
+    search?: string;
+  }): Promise<SolutionSnippet[]> {
+    const response = await apiClient.get("/reference", { params });
+    return response.data;
+  }
+
+  async getSnippet(id: string): Promise<SolutionSnippet> {
+    const response = await apiClient.get(`/reference/${id}`);
+    return response.data;
+  }
+
+  async createSnippet(data: {
+    title: string;
+    language: string;
+    code: string;
+    topicId?: number | null;
+    notes?: string;
+    tags?: string;
+    isPublic?: boolean;
+  }): Promise<{ snippet: SolutionSnippet }> {
+    const response = await apiClient.post("/reference", data);
+    return response.data;
+  }
+
+  async updateSnippet(
+    id: string,
+    data: Partial<{
+      title: string;
+      language: string;
+      code: string;
+      topicId: number | null;
+      notes: string;
+      tags: string;
+      isPublic: boolean;
+    }>,
+  ): Promise<{ snippet: SolutionSnippet }> {
+    const response = await apiClient.put(`/reference/${id}`, data);
+    return response.data;
+  }
+
+  async deleteSnippet(id: string): Promise<BackendSuccessResponse> {
+    const response = await apiClient.delete(`/reference/${id}`);
+    return response.data;
+  }
+
+  async curateSnippets(): Promise<ReferenceCurateResponse> {
+    const response = await apiClient.post("/reference/curate", {}, {
+      timeout: 120000,
+    });
+    return response.data;
+  }
+
+  async downloadReferenceExport(format: "pdf" | "zip"): Promise<Blob> {
+    const response = await apiClient.get(`/reference/export/${format}`, {
+      responseType: "blob",
+    });
+    return response.data;
+  }
+
+  async downloadSnippetPdf(id: string): Promise<Blob> {
+    const response = await apiClient.get(`/reference/${id}/pdf`, {
+      responseType: "blob",
+    });
+    return response.data;
+  }
+
+  // ============ Roadmap Generation ============
+
+  async getMenteeTopicPerformanceOverview(
+    topic: string,
+  ): Promise<Record<string, unknown>> {
+    const response = await apiClient.get(
+      "/roadmaps/modules/topic/mentee-performance-overview",
+      { params: { topic } },
+    );
+    return response.data;
+  }
+
+  async generateMyRoadmap(): Promise<GenerateRoadmapResponse> {
+    const response = await apiClient.post("/roadmaps/generate-my-roadmap", {}, {
+      timeout: 120000,
+    });
+    return response.data;
+  }
+
+  // ============ Nearby Peers ============
+
+  async getNearbyMentees(params?: {
+    country?: string;
+    city?: string;
+    minRating?: number;
+    maxRating?: number;
+    limit?: number;
+  }): Promise<NearbyMentee[]> {
+    const response = await apiClient.get("/users/mentees/nearby", { params });
+    return response.data;
+  }
+
+  // ============ Topics ============
+
+  async getTopics(): Promise<Topic[]> {
+    const response = await apiClient.get("/topics");
+    return response.data;
+  }
+
+  async getTopicById(id: number): Promise<Topic> {
+    const response = await apiClient.get(`/topics/${id}`);
+    return response.data;
+  }
+
+  async createTopic(payload: {
+    title: string;
+    tags: string;
+    rating: string;
+  }): Promise<Topic> {
+    const response = await apiClient.post("/topics", payload);
+    return response.data;
+  }
+
+  async updateTopic(
+    id: number,
+    payload: Partial<{ title: string; tags: string; rating: string }>,
+  ): Promise<Topic> {
+    const response = await apiClient.put(`/topics/${id}`, payload);
+    return response.data;
+  }
+
+  async deleteTopic(id: number): Promise<{ message: string }> {
+    const response = await apiClient.delete(`/topics/${id}`);
     return response.data;
   }
 }
