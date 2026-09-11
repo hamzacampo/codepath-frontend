@@ -1,30 +1,55 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 interface DialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
+  panelClassName?: string;
 }
 
-export function Dialog({ open, onOpenChange, children }: DialogProps) {
-  if (!open) return null;
+export function Dialog({
+  open,
+  onOpenChange,
+  children,
+  panelClassName = "max-w-lg",
+}: DialogProps) {
+  const [mounted, setMounted] = React.useState(false);
 
-  return (
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  if (!open || !mounted) return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-100 flex items-center justify-center overflow-y-auto bg-black/65 px-4 py-6 backdrop-blur-sm"
+      className="fixed inset-0 z-200 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-6 backdrop-blur-sm sm:px-6"
       onClick={() => onOpenChange(false)}
+      role="dialog"
+      aria-modal="true"
     >
       <div
-        className="my-auto w-full max-w-lg"
+        className={`relative z-201 my-auto w-full ${panelClassName}`}
         onClick={(event) => {
           event.stopPropagation();
         }}
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

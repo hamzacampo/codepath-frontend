@@ -15,6 +15,7 @@ import { getApiErrorMessage } from "@/lib/errors";
 import { BookingStatusBadge } from "@/components/coaching/BookingStatusBadge";
 import { CoachingMiniCalendar } from "@/components/coaching/CoachingMiniCalendar";
 import { CoachingStatCard } from "@/components/coaching/CoachingStatCard";
+import { Select } from "@/components/ui/Select";
 import { CoachAvatar } from "@/components/coaching/CoachAvatar";
 import type { BookingSummary, CoachProfile } from "@/types";
 
@@ -371,20 +372,13 @@ function FilterSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm">
-      <span className="text-muted-foreground">{label}:</span>
-      <select
+    <label className="inline-flex min-w-[180px] flex-col gap-1.5 text-sm">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <Select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-transparent text-foreground outline-none"
-      >
-        {options.map((option) => (
-          <option key={option} value={option} className="bg-card text-foreground">
-            {option}
-          </option>
-        ))}
-      </select>
-      <Icon icon="mdi:chevron-down" className="h-4 w-4 text-muted-foreground" aria-hidden />
+        options={options.map((option) => ({ value: option, label: option }))}
+      />
     </label>
   );
 }

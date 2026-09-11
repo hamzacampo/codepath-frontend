@@ -15,7 +15,7 @@ const navItems = [
   { href: "/dashboard/roadmap", label: "My Roadmap", icon: "eos-icons:machine-learning-outlined" },
   { href: "/dashboard/coaches", label: "Coaching Sessions", icon: "mdi:account-tie-outline" },
   { href: "/dashboard/reference", label: "Reference", icon: "mdi:book-open-outline" },
-  { href: "/dashboard/peers", label: "Nearby Peers", icon: "mdi:account-group-outline" },
+  { href: "/dashboard/peers", label: "Nearby Mentees", icon: "mdi:account-group-outline" },
   { href: "/dashboard/profile", label: "Profile", icon: "iconamoon:profile" },
 ] as const;
 

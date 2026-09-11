@@ -6,6 +6,7 @@ import { Icon } from "@iconify/react";
 import { apiService } from "@/lib/api-service";
 import { getApiErrorMessage } from "@/lib/errors";
 import { ContestStatusBadge } from "@/components/contests/ContestStatusBadge";
+import { Select } from "@/components/ui/Select";
 import type { ContestSummary } from "@/types";
 
 export default function AdminContestsPage() {
@@ -71,18 +72,19 @@ export default function AdminContestsPage() {
           </Link>
         </div>
 
-        <select
+        <Select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="w-full sm:w-48 rounded-lg border border-border bg-transparent px-3 py-2 text-sm"
-        >
-          <option value="">All statuses</option>
-          <option value="DRAFT">Draft</option>
-          <option value="SCHEDULED">Scheduled</option>
-          <option value="ONGOING">Ongoing</option>
-          <option value="COMPLETED">Completed</option>
-          <option value="CANCELLED">Cancelled</option>
-        </select>
+          className="w-full sm:w-48"
+          options={[
+            { value: "", label: "All statuses" },
+            { value: "DRAFT", label: "Draft" },
+            { value: "SCHEDULED", label: "Scheduled" },
+            { value: "ONGOING", label: "Ongoing" },
+            { value: "COMPLETED", label: "Completed" },
+            { value: "CANCELLED", label: "Cancelled" },
+          ]}
+        />
 
         {actionError && (
           <div className="rounded-xl bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">

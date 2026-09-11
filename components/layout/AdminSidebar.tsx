@@ -14,7 +14,7 @@ const adminNavItems = [
   { href: "/admin/roadmaps", label: "Roadmaps", icon: "streamline:arrow-roadmap" },
   { href: "/admin/topics", label: "Topics", icon: "mdi:tag-multiple-outline" },
   { href: "/admin/coaches", label: "Coach Session", icon: "mdi:presentation" },
-  { href: "/admin/users", label: "Users", icon: "mdi:account-group-outline" },
+  { href: "/admin/users", label: "Mentees", icon: "eos-icons:machine-learning-outlined" },
   { href: "/admin/reference", label: "Reference", icon: "mdi:book-open-outline" },
   { href: "/admin/insights", label: "Insights", icon: "mdi:lightbulb-outline" },
 ] as const;

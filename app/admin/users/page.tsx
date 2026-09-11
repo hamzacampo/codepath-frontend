@@ -1,141 +1,279 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "@iconify/react";
+import { MenteeDetailModal } from "@/components/admin/MenteeDetailModal";
+import { FilterButtons } from "@/components/ui/FilterButtons";
+import { Select } from "@/components/ui/Select";
 import { apiService } from "@/lib/api-service";
 import { getApiErrorMessage } from "@/lib/errors";
-import type { MenteeSafe } from "@/types";
+import type { MenteeDetails, MenteeSafe } from "@/types";
 
-export default function AdminUsersPage() {
+const PAGE_SIZE = 10;
+const LEVEL_OPTIONS = ["All", "Beginner", "Intermediate", "Advanced", "Expert"];
+
+function formatRegisteredAt(value: string | Date): string {
+  const date = new Date(value);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day} - ${month} - ${year}`;
+}
+
+export default function AdminMenteesPage() {
   const [mentees, setMentees] = useState<MenteeSafe[]>([]);
-  const [nameFilter, setNameFilter] = useState("");
   const [emailFilter, setEmailFilter] = useState("");
+  const [usernameFilter, setUsernameFilter] = useState("");
+  const [levelFilter, setLevelFilter] = useState("All");
+  const [appliedFilters, setAppliedFilters] = useState({
+    email: "",
+    username: "",
+    level: "All",
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<MenteeSafe | null>(null);
+  const [page, setPage] = useState(1);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedDetails, setSelectedDetails] = useState<MenteeDetails | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
 
   const fetchMentees = useCallback(() => {
     setLoading(true);
     setError(null);
     return apiService
       .getMentees({
-        name: nameFilter.trim() || undefined,
-        email: emailFilter.trim() || undefined,
+        email: appliedFilters.email.trim() || undefined,
+        username: appliedFilters.username.trim() || undefined,
+        level: appliedFilters.level !== "All" ? appliedFilters.level : undefined,
       })
-      .then(setMentees)
+      .then((list) => {
+        setMentees(list);
+        setPage(1);
+      })
       .catch((err) => {
         setError(getApiErrorMessage(err, "Failed to load mentees"));
         setMentees([]);
       })
       .finally(() => setLoading(false));
-  }, [nameFilter, emailFilter]);
+  }, [appliedFilters]);
 
   useEffect(() => {
-    return fetchMentees();
+    fetchMentees();
   }, [fetchMentees]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setSelectedDetails(null);
+      setDetailsError(null);
+      return;
+    }
+
+    setDetailsLoading(true);
+    setDetailsError(null);
+    apiService
+      .getMentee(selectedId)
+      .then(setSelectedDetails)
+      .catch((err) => {
+        setDetailsError(getApiErrorMessage(err, "Failed to load mentee details"));
+        setSelectedDetails(null);
+      })
+      .finally(() => setDetailsLoading(false));
+  }, [selectedId]);
+
+  const totalPages = Math.max(1, Math.ceil(mentees.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const pageMentees = useMemo(
+    () => mentees.slice(pageStart, pageStart + PAGE_SIZE),
+    [mentees, pageStart],
+  );
+
+  const handleFilter = (event: React.FormEvent) => {
+    event.preventDefault();
+    setAppliedFilters({
+      email: emailFilter,
+      username: usernameFilter,
+      level: levelFilter,
+    });
+  };
+
+  const handleClear = () => {
+    setEmailFilter("");
+    setUsernameFilter("");
+    setLevelFilter("All");
+    setAppliedFilters({ email: "", username: "", level: "All" });
+  };
+
+  const pageNumbers = useMemo(() => {
+    const maxButtons = Math.min(5, totalPages);
+    const start = Math.max(1, Math.min(currentPage - 2, totalPages - maxButtons + 1));
+    return Array.from({ length: maxButtons }, (_, index) => start + index);
+  }, [currentPage, totalPages]);
 
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-      <div className="flex flex-col gap-6 max-w-6xl mx-auto">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Users</h1>
-          <p className="text-sm text-muted-foreground">View and manage mentees</p>
-        </div>
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+        <header>
+          <h1 className="text-3xl font-bold text-foreground">Mentees</h1>
+        </header>
 
         <form
-          onSubmit={(e) => { e.preventDefault(); fetchMentees(); }}
-          className="flex flex-col sm:flex-row gap-3"
+          onSubmit={handleFilter}
+          className="flex flex-col gap-4 rounded-[10px] border border-[#1e1e1e] bg-[#0c0c0c] p-5 lg:flex-row lg:flex-wrap lg:items-end"
         >
-          <input
-            value={nameFilter}
-            onChange={(e) => setNameFilter(e.target.value)}
-            placeholder="Filter by name..."
-            className="flex-1 rounded-lg border border-border bg-transparent px-3 py-2 text-sm"
-          />
-          <input
-            value={emailFilter}
-            onChange={(e) => setEmailFilter(e.target.value)}
-            placeholder="Filter by email..."
-            className="flex-1 rounded-lg border border-border bg-transparent px-3 py-2 text-sm"
-          />
-          <button type="submit" className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-muted">
-            Filter
-          </button>
+          <label className="flex w-full flex-col gap-1.5 lg:max-w-[220px]">
+            <span className="text-xs font-semibold text-accent">Email</span>
+            <input
+              value={emailFilter}
+              onChange={(event) => setEmailFilter(event.target.value)}
+              placeholder="johndoe@gmail.com"
+              className="h-10 rounded-[10px] border border-[#1e1e1e] bg-black px-3.5 text-sm text-foreground outline-none transition-colors focus:border-primary"
+            />
+          </label>
+
+          <label className="flex w-full flex-col gap-1.5 lg:max-w-[220px]">
+            <span className="text-xs font-semibold text-accent">Username</span>
+            <input
+              value={usernameFilter}
+              onChange={(event) => setUsernameFilter(event.target.value)}
+              placeholder="john-doe"
+              className="h-10 rounded-[10px] border border-[#1e1e1e] bg-black px-3.5 text-sm text-foreground outline-none transition-colors focus:border-primary"
+            />
+          </label>
+
+          <label className="flex w-full flex-col gap-1.5 lg:max-w-[180px]">
+            <span className="text-xs font-semibold text-accent">Level</span>
+            <Select
+              value={levelFilter}
+              onChange={(event) => setLevelFilter(event.target.value)}
+              className="h-10 rounded-[10px] border-[#1e1e1e] bg-black"
+              options={LEVEL_OPTIONS.map((level) => ({
+                value: level,
+                label: level === "All" ? "All levels" : level,
+              }))}
+            />
+          </label>
+
+          <FilterButtons loading={loading} onClear={handleClear} />
         </form>
 
         {error && (
-          <div className="rounded-xl bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
+          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
         )}
 
-        {loading ? (
-          <div className="py-16 text-center text-muted-foreground">Loading mentees...</div>
-        ) : mentees.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border px-4 py-12 text-center text-sm text-muted-foreground">
-            No mentees found.
-          </div>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-sm">
+        <div className="overflow-hidden rounded-lg border border-border">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
               <thead>
-                <tr className="border-b border-border bg-secondary/50">
-                  <th className="px-4 py-3 text-left font-medium">Username</th>
-                  <th className="px-4 py-3 text-left font-medium">Email</th>
-                  <th className="px-4 py-3 text-left font-medium">Joined</th>
-                  <th className="px-4 py-3 text-right font-medium">Actions</th>
+                <tr className="bg-[#1a1a1a] text-left">
+                  <th className="px-4 py-3 font-medium text-foreground">Full Name</th>
+                  <th className="px-4 py-3 font-medium text-foreground">Email</th>
+                  <th className="px-4 py-3 font-medium text-foreground">Level</th>
+                  <th className="px-4 py-3 font-medium text-foreground">Registered At</th>
+                  <th className="px-4 py-3 text-right font-medium text-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {mentees.map((mentee) => (
-                  <tr key={mentee.id} className="border-b border-border/50">
-                    <td className="px-4 py-3">{mentee.username}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{mentee.email}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {new Date(mentee.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setSelected(mentee)}
-                        className="text-xs text-primary hover:underline"
-                      >
-                        View
-                      </button>
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                      Loading mentees...
                     </td>
                   </tr>
-                ))}
+                ) : pageMentees.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                      No mentees found.
+                    </td>
+                  </tr>
+                ) : (
+                  pageMentees.map((mentee) => (
+                    <tr key={mentee.id} className="border-t border-border/60">
+                      <td className="px-4 py-3 text-foreground">
+                        {mentee.fullName || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{mentee.email}</td>
+                      <td className="px-4 py-3 text-foreground">{mentee.level || "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {formatRegisteredAt(mentee.createdAt)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedId(mentee.id)}
+                          className="inline-flex items-center justify-center rounded-md p-1 text-primary hover:bg-primary/10"
+                          aria-label={`View ${mentee.username}`}
+                        >
+                          <Icon icon="tabler:eye" className="h-6 w-6" aria-hidden />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
-        )}
+        </div>
 
-        {selected && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
-            <div className="w-full max-w-md rounded-lg border border-border bg-background p-6 flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Mentee Details</h2>
-                <button type="button" onClick={() => setSelected(null)} aria-label="Close">
-                  <Icon icon="mdi:close" className="w-5 h-5" aria-hidden />
-                </button>
-              </div>
-              <div className="text-sm flex flex-col gap-2">
-                <p><span className="text-muted-foreground">Username:</span> {selected.username}</p>
-                <p><span className="text-muted-foreground">Email:</span> {selected.email}</p>
-                <p><span className="text-muted-foreground">ID:</span> <span className="font-mono text-xs">{selected.id}</span></p>
-                <p><span className="text-muted-foreground">Joined:</span> {new Date(selected.createdAt).toLocaleString()}</p>
-              </div>
+        {!loading && mentees.length > 0 && (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing {pageStart + 1}-{Math.min(pageStart + PAGE_SIZE, mentees.length)} of{" "}
+              {mentees.length} mentees
+            </p>
+
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setSelected(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-muted"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={currentPage === 1}
+                className="rounded-full p-2 text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Previous page"
               >
-                Close
+                <Icon icon="mdi:chevron-left" className="h-5 w-5" aria-hidden />
+              </button>
+
+              {pageNumbers.map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  type="button"
+                  onClick={() => setPage(pageNumber)}
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
+                    pageNumber === currentPage
+                      ? "bg-primary text-primary-foreground"
+                      : "text-foreground hover:bg-secondary"
+                  }`}
+                >
+                  {pageNumber}
+                </button>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                disabled={currentPage === totalPages}
+                className="rounded-full p-2 text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Next page"
+              >
+                <Icon icon="mdi:chevron-right" className="h-5 w-5" aria-hidden />
               </button>
             </div>
           </div>
         )}
       </div>
+
+      <MenteeDetailModal
+        open={Boolean(selectedId)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedId(null);
+        }}
+        details={selectedDetails}
+        loading={detailsLoading}
+        error={detailsError}
+      />
     </div>
   );
 }

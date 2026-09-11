@@ -21,6 +21,8 @@ export interface MenteeSafe {
   id: string;
   username: string;
   email: string;
+  fullName: string | null;
+  level: string | null;
   createdAt: Date | string;
 }
 
@@ -32,6 +34,8 @@ export interface MenteeDetails {
   phone: string;
   country: string;
   bio: string;
+  level: string | null;
+  codeforcesHandle: string | null;
   createdAt: Date | string;
 }
 
@@ -513,7 +517,7 @@ export interface ReferenceCurateResponse {
   snippetCount: number;
 }
 
-// Nearby Peers
+// Nearby Mentees
 export interface NearbyMentee {
   userId: string;
   username: string;
@@ -526,6 +530,8 @@ export interface NearbyMentee {
   problemsSolved: number | null;
   level: string | null;
   similarityScore: number;
+  proximityLabel: string;
+  codeforcesHandle: string | null;
 }
 
 // Roadmap Generation

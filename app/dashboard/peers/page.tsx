@@ -1,137 +1,188 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Icon } from "@iconify/react";
 import { apiService } from "@/lib/api-service";
 import { getApiErrorMessage } from "@/lib/errors";
+import {
+  connectWithMentee,
+  formatMenteeRatingLine,
+  getMenteeInitials,
+} from "@/lib/nearby-mentees-utils";
 import { useAuth } from "@/hooks/use-auth";
+import { FilterButtons } from "@/components/ui/FilterButtons";
+import { NotificationToast } from "@/components/ui/NotificationToast";
 import type { NearbyMentee } from "@/types";
 
-export default function NearbyPeersPage() {
+export default function NearbyMenteesPage() {
   const { user } = useAuth();
-  const [peers, setPeers] = useState<NearbyMentee[]>([]);
-  const [country, setCountry] = useState("");
-  const [city, setCity] = useState("");
+  const [mentees, setMentees] = useState<NearbyMentee[]>([]);
+  const [limit, setLimit] = useState("10");
   const [minRating, setMinRating] = useState("");
+  const [appliedLimit, setAppliedLimit] = useState(10);
+  const [appliedMinRating, setAppliedMinRating] = useState<number | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  const fetchPeers = useCallback(() => {
+  const fetchMentees = useCallback(() => {
     setLoading(true);
     setError(null);
     return apiService
       .getNearbyMentees({
-        country: country.trim() || undefined,
-        city: city.trim() || undefined,
-        minRating: minRating ? Number(minRating) : undefined,
-        limit: 50,
+        minRating: appliedMinRating,
+        limit: appliedLimit,
       })
-      .then(setPeers)
+      .then(setMentees)
       .catch((err) => {
-        setError(getApiErrorMessage(err, "Failed to load nearby peers"));
-        setPeers([]);
+        setError(getApiErrorMessage(err, "Failed to load nearby mentees"));
+        setMentees([]);
       })
       .finally(() => setLoading(false));
-  }, [country, city, minRating]);
+  }, [appliedLimit, appliedMinRating]);
 
   useEffect(() => {
-    return fetchPeers();
-  }, [fetchPeers]);
+    fetchMentees();
+  }, [fetchMentees]);
 
-  const filteredPeers = peers.filter((p) => p.userId !== user?.id);
+  const handleApplyFilter = (event: React.FormEvent) => {
+    event.preventDefault();
+    const parsedLimit = Number(limit);
+    const parsedMinRating = minRating.trim() ? Number(minRating) : undefined;
+
+    if (!Number.isFinite(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+      setError("Limit must be between 1 and 100.");
+      return;
+    }
+    if (
+      parsedMinRating != null &&
+      (!Number.isFinite(parsedMinRating) || parsedMinRating < 0)
+    ) {
+      setError("Minimum rating must be a non-negative number.");
+      return;
+    }
+
+    setError(null);
+    setAppliedLimit(parsedLimit);
+    setAppliedMinRating(parsedMinRating);
+  };
+
+  const handleClearFilters = () => {
+    setLimit("10");
+    setMinRating("");
+    setAppliedLimit(10);
+    setAppliedMinRating(undefined);
+    setError(null);
+  };
+
+  const handleConnect = async (peer: NearbyMentee) => {
+    setConnectingId(peer.userId);
+    try {
+      const message = await connectWithMentee(peer);
+      setToast({ type: "success", message });
+    } catch {
+      setToast({
+        type: "error",
+        message: "Could not connect with this mentee. Please try again.",
+      });
+    } finally {
+      setConnectingId(null);
+    }
+  };
+
+  const visibleMentees = mentees.filter((mentee) => mentee.userId !== user?.id);
 
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-      <div className="flex flex-col gap-6 max-w-6xl mx-auto">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Nearby Peers</h1>
+      {toast && (
+        <NotificationToast
+          type={toast.type}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
+      )}
+
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+        <header className="flex flex-col gap-1">
+          <h1 className="text-xl font-bold text-foreground sm:text-[21px]">Nearby Mentees</h1>
           <p className="text-sm text-muted-foreground">
-            Find mentees with similar skill level, rating, and location.
+            Discover nearby peer mentees sorted by proximity and rating.
           </p>
-        </div>
+        </header>
 
         <form
-          onSubmit={(e) => { e.preventDefault(); fetchPeers(); }}
-          className="grid grid-cols-1 sm:grid-cols-4 gap-3"
+          onSubmit={handleApplyFilter}
+          className="flex flex-col gap-4 rounded-[10px] border border-[#1e1e1e] bg-[#0c0c0c] p-5 sm:flex-row sm:flex-wrap sm:items-end"
         >
-          <input
-            value={country}
-            onChange={(e) => setCountry(e.target.value)}
-            placeholder="Country"
-            className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm"
+          <label className="flex w-full max-w-[150px] flex-col gap-1.5">
+            <span className="text-xs font-semibold text-accent">Limit</span>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={limit}
+              onChange={(event) => setLimit(event.target.value)}
+              className="h-10 rounded-[10px] border border-[#1e1e1e] bg-black px-3.5 text-sm text-foreground outline-none transition-colors focus:border-primary"
+            />
+          </label>
+
+          <label className="flex w-full max-w-[200px] flex-col gap-1.5">
+            <span className="text-xs font-semibold text-accent">Minimum Rating</span>
+            <input
+              type="number"
+              min={0}
+              value={minRating}
+              onChange={(event) => setMinRating(event.target.value)}
+              placeholder="1200"
+              className="h-10 rounded-[10px] border border-[#1e1e1e] bg-black px-3.5 text-sm text-foreground outline-none transition-colors focus:border-primary"
+            />
+          </label>
+
+          <FilterButtons
+            applyLabel="Apply Filter"
+            loading={loading}
+            onClear={handleClearFilters}
           />
-          <input
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            placeholder="City"
-            className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm"
-          />
-          <input
-            type="number"
-            value={minRating}
-            onChange={(e) => setMinRating(e.target.value)}
-            placeholder="Min rating"
-            className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm"
-          />
-          <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-            Search
-          </button>
         </form>
 
         {error && (
-          <div className="rounded-xl bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
+          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
         )}
 
         {loading ? (
-          <div className="py-16 text-center text-muted-foreground">Finding peers...</div>
-        ) : filteredPeers.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border px-4 py-12 text-center text-sm text-muted-foreground">
-            No nearby peers found. Try adjusting your filters.
+          <div className="py-16 text-center text-muted-foreground">Finding nearby mentees...</div>
+        ) : visibleMentees.length === 0 ? (
+          <div className="rounded-[10px] border border-dashed border-[#1e1e1e] px-4 py-12 text-center text-sm text-muted-foreground">
+            No nearby mentees found. Try adjusting your filters.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredPeers.map((peer) => (
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {visibleMentees.map((peer) => (
               <article
                 key={peer.userId}
-                className="rounded-lg border border-border bg-secondary/40 p-4 flex flex-col gap-2"
+                className="flex flex-col items-center gap-3 rounded-[10px] border border-[#1e1e1e] bg-[#0c0c0c] p-5"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h2 className="font-semibold text-foreground">
-                      {peer.fullName ?? peer.username}
-                    </h2>
-                    <p className="text-xs text-muted-foreground">@{peer.username}</p>
-                  </div>
-                  <span className="text-xs font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-md">
-                    {Math.round(peer.similarityScore * 100)}% match
-                  </span>
+                <div className="flex size-[60px] items-center justify-center rounded-full bg-primary text-xl font-semibold text-primary-foreground">
+                  {getMenteeInitials(peer)}
                 </div>
-                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  {peer.level && (
-                    <span className="inline-flex items-center gap-1">
-                      <Icon icon="mdi:medal-outline" className="w-3.5 h-3.5" aria-hidden />
-                      {peer.level}
-                    </span>
-                  )}
-                  {peer.rating != null && (
-                    <span className="inline-flex items-center gap-1">
-                      <Icon icon="mdi:chart-line" className="w-3.5 h-3.5" aria-hidden />
-                      {peer.rating}
-                    </span>
-                  )}
-                  {peer.problemsSolved != null && (
-                    <span>{peer.problemsSolved} solved</span>
-                  )}
-                  {peer.accuracy != null && (
-                    <span>{Math.round(peer.accuracy)}% accuracy</span>
-                  )}
+
+                <div className="text-center">
+                  <h2 className="text-base font-semibold text-foreground">@{peer.username}</h2>
+                  <p className="mt-1 text-[13px] text-muted-foreground">
+                    {formatMenteeRatingLine(peer)}
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {[peer.city, peer.country].filter(Boolean).join(", ") || "Location unknown"}
-                  {peer.organization && ` · ${peer.organization}`}
-                </p>
+
+                <button
+                  type="button"
+                  onClick={() => handleConnect(peer)}
+                  disabled={connectingId === peer.userId}
+                  className="w-full rounded-[10px] bg-accent px-[18px] py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {connectingId === peer.userId ? "Connecting..." : "Connect"}
+                </button>
               </article>
             ))}
           </div>

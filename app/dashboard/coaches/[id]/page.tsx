@@ -8,6 +8,7 @@ import { apiService } from "@/lib/api-service";
 import { getApiErrorMessage } from "@/lib/errors";
 import type { CoachProfile } from "@/types";
 import { CoachAvatar } from "@/components/coaching/CoachAvatar";
+import { DateTimeInput } from "@/components/ui/DateTimeInput";
 
 export default function CoachDetailPage() {
   const params = useParams();
@@ -146,22 +147,18 @@ export default function CoachDetailPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium">Start time</span>
-                <input
-                  type="datetime-local"
+                <DateTimeInput
                   required
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm"
                 />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium">End time</span>
-                <input
-                  type="datetime-local"
+                <DateTimeInput
                   required
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
-                  className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm"
                 />
               </label>
             </div>

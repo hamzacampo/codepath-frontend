@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Icon } from "@iconify/react";
 import { apiService } from "@/lib/api-service";
+import { Select } from "@/components/ui/Select";
 import { getApiErrorMessage, downloadBlob } from "@/lib/errors";
 import type { ReferenceCurateResponse, SolutionSnippet, Topic } from "@/types";
 
@@ -214,22 +215,28 @@ export default function ReferenceLibraryPage() {
                 placeholder="Title"
                 className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm"
               />
-              <select
+              <Select
                 value={formLanguage}
                 onChange={(e) => setFormLanguage(e.target.value)}
-                className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm"
-              >
-                {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
-              </select>
+                options={LANGUAGES.map((language) => ({
+                  value: language,
+                  label: language,
+                }))}
+              />
             </div>
-            <select
-              value={formTopicId}
-              onChange={(e) => setFormTopicId(e.target.value ? Number(e.target.value) : "")}
-              className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm"
-            >
-              <option value="">No topic</option>
-              {topics.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-            </select>
+            <Select
+              value={formTopicId === "" ? "" : String(formTopicId)}
+              onChange={(e) =>
+                setFormTopicId(e.target.value ? Number(e.target.value) : "")
+              }
+              options={[
+                { value: "", label: "No topic" },
+                ...topics.map((topic) => ({
+                  value: String(topic.id),
+                  label: topic.title,
+                })),
+              ]}
+            />
             <textarea
               required
               value={formCode}

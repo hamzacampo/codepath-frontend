@@ -180,6 +180,7 @@ class APIService {
    */
   async getMentees(params?: {
     name?: string;
+    username?: string;
     email?: string;
     level?: string;
   }): Promise<MenteeSafe[]> {
@@ -1313,7 +1314,7 @@ class APIService {
     return response.data;
   }
 
-  // ============ Nearby Peers ============
+  // ============ Nearby Mentees ============
 
   async getNearbyMentees(params?: {
     country?: string;

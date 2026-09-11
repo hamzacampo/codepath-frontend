@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Play } from "lucide-react";
+import { ChevronDown, Play } from "lucide-react";
 import Link from "next/link";
 import CodeEditor from "@/components/editor/MonacoEditor";
 import { apiService } from "@/lib/api-service";
@@ -9,6 +9,7 @@ import { stripDuplicateMathLayers } from "@/lib/problem-html";
 import { ProblemSourceBadge } from "@/components/problemset/ProblemSourceBadge";
 import { CodeforcesConnectDialog } from "@/components/profile/CodeforcesConnectDialog";
 import { NotificationToast } from "@/components/ui/NotificationToast";
+import { Select } from "@/components/ui/Select";
 import {
   isCodeforcesLinkRequiredMessage,
   useCodeforcesIntegration,
@@ -279,23 +280,16 @@ export function CodeforcesProblemView({ contestId, index }: CodeforcesProblemVie
 
             <div>
               <p className="text-sm font-semibold text-foreground mb-2">Language</p>
-              <div className="relative">
-                <select
-                  value={language}
-                  onChange={(e) =>
-                    handleLanguageChange(e.target.value as typeof language)
-                  }
-                  className="w-full appearance-none rounded-lg border border-border bg-card px-3 py-2 pr-8 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  {LANGUAGES.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                <ChevronRight
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none"
-                  aria-hidden
-                />
-              </div>
+              <Select
+                value={language}
+                onChange={(e) =>
+                  handleLanguageChange(e.target.value as typeof language)
+                }
+                options={LANGUAGES.map((opt) => ({
+                  value: opt.value,
+                  label: opt.label,
+                }))}
+              />
             </div>
 
             <div>

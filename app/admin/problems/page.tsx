@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@iconify/react";
 import { apiService } from "@/lib/api-service";
+import { Select } from "@/components/ui/Select";
 import type { CodePathProblemListItem, ProblemPublishStatus } from "@/types";
 
 const PAGE_SIZE = 20;
@@ -162,18 +163,19 @@ export default function AdminProblemsPage() {
               Search
             </button>
           </form>
-          <select
+          <Select
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value as ProblemPublishStatus | "ALL");
               setPage(1);
             }}
-            className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="ALL">All statuses</option>
-            <option value="DRAFT">Draft</option>
-            <option value="PUBLISHED">Published</option>
-          </select>
+            className="sm:min-w-40"
+            options={[
+              { value: "ALL", label: "All statuses" },
+              { value: "DRAFT", label: "Draft" },
+              { value: "PUBLISHED", label: "Published" },
+            ]}
+          />
         </div>
 
         {actionSuccess && (
